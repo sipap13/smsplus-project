@@ -1,7 +1,8 @@
+/* eslint-disable react/prop-types */
 import { useState } from 'react';
 import api from '../api/axios';
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, bootError = '' }) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
@@ -52,13 +53,13 @@ export default function Login({ onLogin }) {
         </div>
 
         {/* Erreur */}
-        {error && (
+        {(bootError || error) && (
           <div style={{
             background: '#ffebee', color: '#c62828', border: '1px solid #ef9a9a',
             padding: '0.75rem 1rem', borderRadius: '8px',
             marginBottom: '1rem', fontSize: '0.9rem', textAlign: 'center',
           }}>
-            ⚠️ {error}
+            ⚠️ {bootError || error}
           </div>
         )}
 

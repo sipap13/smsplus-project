@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 export default function Sidebar({ user, activePage, onNavigate }) {
   const isAdmin    = user.role === 'ADMIN';
   const isOp       = user.role === 'ANALYSTE_OP' || isAdmin;

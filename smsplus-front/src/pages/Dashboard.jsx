@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import {
@@ -5,6 +6,7 @@ import {
   ResponsiveContainer, CartesianGrid,
   BarChart, Bar,
 } from 'recharts';
+import { formatCompactNumber, formatDT } from '../lib/format';
 
 export default function Dashboard({ user }) {
   const [stats, setStats] = useState(null);
@@ -42,20 +44,6 @@ export default function Dashboard({ user }) {
             setError("Certaines donnees n'ont pas pu etre chargees. Verifie l'API.");
           }
         } else {
-          const uniqueDates = Array.from(new Set(dayRevenus.map(r => r.start_date).filter(Boolean)));
-          if (uniqueDates.length <= 1) {
-            const date = uniqueDates[0];
-            if (date) {
-              // When only one day exists, display evolution by hour for a more meaningful chart.
-              try {
-                const hourRes = await api.get(`/dashboard/revenus?granularity=hour&date=${encodeURIComponent(date)}&limit=5000&include_data=${includeData ? 1 : 0}`);
-                dayRevenus = hourRes.data || dayRevenus;
-              } catch {
-                // Keep day data if hour request fails.
-              }
-            }
-          }
-
           setRevenus(dayRevenus);
           if (results.some((r) => r.status === 'rejected')) {
             setError("Certaines donnees n'ont pas pu etre chargees. Verifie l'API.");
@@ -145,14 +133,14 @@ export default function Dashboard({ user }) {
   const kpis = [
     {
       label: includeData ? 'Revenus Total (incl. Trafic Data)' : 'Revenus SMS+',
-      value: `${parseFloat(stats.total_revenus).toFixed(3)} DT`,
+      value: formatDT(stats.total_revenus),
       icon: '💰',
       color: '#1a237e',
       trend: '+12%',
     },
-    { label: 'Abonnés Actifs',   value: stats.abonnes_actifs,  icon: '👥', color: '#0288d1', trend: '+5%' },
-    { label: 'Services Actifs',  value: stats.services_actifs, icon: '📋', color: '#00838f', trend: '—' },
-    { label: "CDR Aujourd'hui",  value: stats.cdr_du_jour,      icon: '📱', color: '#2e7d32', trend: '0' },
+    { label: 'Abonnés Actifs',   value: formatCompactNumber(stats.abonnes_actifs),  icon: '👥', color: '#0288d1', trend: '+5%' },
+    { label: 'Services Actifs',  value: formatCompactNumber(stats.services_actifs), icon: '📋', color: '#00838f', trend: '—' },
+    { label: "CDR Aujourd'hui",  value: formatCompactNumber(stats.cdr_du_jour),     icon: '📱', color: '#2e7d32', trend: '0' },
   ];
 
   return (
@@ -228,8 +216,8 @@ export default function Dashboard({ user }) {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#888' }} />
-                <Tooltip formatter={(v) => [`${v} DT`, 'Revenus']} contentStyle={{ borderRadius: '8px', border: '1px solid #e8eaf6' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#888' }} tickFormatter={formatCompactNumber} />
+                <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} contentStyle={{ borderRadius: '8px', border: '1px solid #e8eaf6' }} />
                 <Area type="monotone" dataKey="total" stroke="#1a237e" strokeWidth={2} fill="url(#colorTotal)" name="Revenus (DT)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -248,7 +236,7 @@ export default function Dashboard({ user }) {
               <div key={s.name} style={{ marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#333' }}>{s.name}</span>
-                  <span style={{ fontSize: '0.82rem', color: '#1a237e', fontWeight: 700 }}>{s.total.toFixed(3)} DT</span>
+                  <span style={{ fontSize: '0.82rem', color: '#1a237e', fontWeight: 700 }}>{formatDT(s.total)}</span>
                 </div>
                 <div style={{ background: '#f0f4ff', borderRadius: '6px', height: '6px' }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: `hsl(${220 + i * 20}, 70%, ${50 + i * 5}%)`, borderRadius: '6px', transition: 'width 0.5s' }} />
@@ -267,8 +255,8 @@ export default function Dashboard({ user }) {
             <BarChart data={serviceChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#888' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#888' }} />
-              <Tooltip formatter={(v) => [`${v} DT`, 'Revenus']} contentStyle={{ borderRadius: '8px' }} />
+              <YAxis tick={{ fontSize: 11, fill: '#888' }} tickFormatter={formatCompactNumber} />
+              <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} contentStyle={{ borderRadius: '8px' }} />
               <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#0288d1" name="Revenus (DT)" />
             </BarChart>
           </ResponsiveContainer>

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    name: smsplus-api (lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smsplus-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo, pdo_sqlite, sqlite3
+          coverage: none
+      - name: Install composer deps
+        run: composer install --no-interaction --prefer-dist
+      - name: Prepare env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Run migrations (sqlite)
+        run: php artisan migrate --force
+      - name: Run tests
+        run: php artisan test
+
+  front:
+    name: smsplus-front (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smsplus-front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: smsplus-front/package-lock.json
+      - name: Install deps
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+

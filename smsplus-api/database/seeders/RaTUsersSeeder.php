@@ -10,7 +10,7 @@ class RaTUsersSeeder extends Seeder
 {
     public function run(): void
     {
-        DB::table('ra_t_users')->insert([
+        $rows = [
             [
                 'email'     => 'admin@tt.tn',
                 'password'  => Hash::make('admin123'),
@@ -18,8 +18,6 @@ class RaTUsersSeeder extends Seeder
                 'role'      => 'ADMIN',
                 'tel'       => '+216 71 000 001',
                 'actif'     => true,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
             [
                 'email'     => 'analyste.op@tt.tn',
@@ -28,8 +26,6 @@ class RaTUsersSeeder extends Seeder
                 'role'      => 'ANALYSTE_OP',
                 'tel'       => '+216 71 000 002',
                 'actif'     => true,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
             [
                 'email'     => 'analyste.buss@tt.tn',
@@ -38,9 +34,17 @@ class RaTUsersSeeder extends Seeder
                 'role'      => 'ANALYSTE_BUSS',
                 'tel'       => '+216 71 000 003',
                 'actif'     => true,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
-        ]);
+        ];
+
+        foreach ($rows as $row) {
+            DB::table('ra_t_users')->updateOrInsert(
+                ['email' => $row['email']],
+                array_merge($row, [
+                    'updated_at' => now(),
+                    'created_at' => DB::raw("COALESCE(created_at, '" . now()->toDateTimeString() . "')"),
+                ])
+            );
+        }
     }
 }

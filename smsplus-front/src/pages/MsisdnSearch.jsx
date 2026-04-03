@@ -26,7 +26,7 @@ export default function MsisdnSearch() {
   return (
     <div style={{ padding: '2rem' }}>
       <h1 style={{ margin: '0 0 0.4rem', color: '#1a237e', fontSize: '1.6rem' }}>🔍 Recherche par MSISDN</h1>
-      <p style={{ margin: '0 0 2rem', color: '#888', fontSize: '0.9rem' }}>Recherchez les réclamations d'un abonné par son numéro</p>
+      <p style={{ margin: '0 0 2rem', color: '#888', fontSize: '0.9rem' }}>Recherchez les réclamations d&apos;un abonné par son numéro</p>
 
       {/* Search bar */}
       <div style={{

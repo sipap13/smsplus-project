@@ -4,6 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, PieChart, Pie, Cell,
 } from 'recharts';
+import { formatCompactNumber, formatDT } from '../lib/format';
 
 const COLORS = ['#1a237e', '#0288d1', '#00838f', '#2e7d32', '#e65100', '#6a1b9a'];
 
@@ -29,17 +30,6 @@ export default function Revenus() {
         ]);
 
         let revenus = revenusRes.data || [];
-        const uniqueDates = Array.from(new Set((revenus || []).map(r => r.start_date).filter(Boolean)));
-
-        if (uniqueDates.length <= 1 && uniqueDates[0]) {
-          // If only one date exists, show the evolution by hour.
-          try {
-              const hourRes = await api.get(`/dashboard/revenus?granularity=hour&date=${encodeURIComponent(uniqueDates[0])}&limit=5000&include_data=${includeData ? 1 : 0}`);
-            revenus = hourRes.data || revenus;
-          } catch {
-            // keep day data
-          }
-        }
 
         if (!mounted) return;
         setData(revenus);
@@ -78,7 +68,7 @@ export default function Revenus() {
   const filteredPieData = hideDataInPie ? pieData.filter((row) => row.name !== 'Trafic Data') : pieData;
   const pieDataForChart = filteredPieData.length >= 2 ? filteredPieData : pieData;
 
-  const isHourMode = data.some((r) => r.hour !== undefined && r.hour !== null);
+  const isHourMode = false;
 
   // Group by start_date (day mode) or hour (hour mode)
   const byTime = data.reduce((acc, row) => {
@@ -145,11 +135,11 @@ export default function Revenus() {
         {[
           {
             label: includeData ? 'Total Revenus (incl. Trafic Data)' : 'Total Revenus SMS+',
-            value: `${totalRevenus.toFixed(3)} DT`,
+            value: formatDT(totalRevenus),
             color: '#1a237e',
             icon: '💰',
           },
-          { label: 'Total Transactions', value: totalCdr.toLocaleString(), color: '#0288d1', icon: '📱' },
+          { label: 'Total Transactions', value: totalCdr.toLocaleString('fr-FR'), color: '#0288d1', icon: '📱' },
           { label: 'Services actifs', value: pieDataForChart.length, color: '#00838f', icon: '📋' },
         ].map(k => (
           <div key={k.label} style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -174,8 +164,8 @@ export default function Revenus() {
             <BarChart data={barData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => [`${v} DT`, 'Revenus']} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} />
+              <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} />
               <Bar dataKey="total" fill="#1a237e" radius={[4, 4, 0, 0]} name="Revenus (DT)" />
             </BarChart>
           </ResponsiveContainer>
@@ -191,7 +181,7 @@ export default function Revenus() {
               <Pie data={pieDataForChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                 {pieDataForChart.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v) => `${v} DT`} />
+              <Tooltip formatter={(v) => formatDT(v)} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -223,8 +213,8 @@ export default function Revenus() {
                     <span style={{ background: '#e8eaf6', color: '#1a237e', padding: '0.2rem 0.5rem', borderRadius: '20px', fontSize: '0.82rem', fontWeight: 600, marginRight: '0.5rem' }}>{row.keyword}</span>
                     <span style={{ color: '#666', fontSize: '0.88rem' }}>{svc?.nom_service || ''}</span>
                   </td>
-                  <td style={{ padding: '0.75rem 1rem', color: '#333' }}>{parseInt(row.nb_cdr).toLocaleString()}</td>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#2e7d32' }}>{parseFloat(row.total).toFixed(3)} DT</td>
+                  <td style={{ padding: '0.75rem 1rem', color: '#333' }}>{parseInt(row.nb_cdr).toLocaleString('fr-FR')}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#2e7d32' }}>{formatDT(row.total)}</td>
                 </tr>
               );
             })}
@@ -232,8 +222,8 @@ export default function Revenus() {
           <tfoot>
             <tr style={{ background: '#f5f7ff', fontWeight: 700 }}>
               <td colSpan={2} style={{ padding: '0.875rem 1rem', color: '#1a237e' }}>TOTAL</td>
-              <td style={{ padding: '0.875rem 1rem', color: '#1a237e' }}>{totalCdr.toLocaleString()}</td>
-              <td style={{ padding: '0.875rem 1rem', color: '#2e7d32' }}>{totalRevenus.toFixed(3)} DT</td>
+              <td style={{ padding: '0.875rem 1rem', color: '#1a237e' }}>{totalCdr.toLocaleString('fr-FR')}</td>
+              <td style={{ padding: '0.875rem 1rem', color: '#2e7d32' }}>{formatDT(totalRevenus)}</td>
             </tr>
           </tfoot>
         </table>

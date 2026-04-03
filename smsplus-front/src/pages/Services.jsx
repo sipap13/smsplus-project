@@ -52,7 +52,7 @@ export default function Services() {
       setShowForm(false);
       load();
       setTimeout(() => setMsg(''), 3000);
-    } catch (e) {
+    } catch {
       setMsg('❌ Erreur lors de l\'enregistrement');
     }
   };

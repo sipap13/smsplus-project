@@ -42,7 +42,9 @@ export default function Users() {
   const toggleActive = async (user) => {
     try {
       await api.put(`/users/${user.id}`, { actif: !user.actif });
-    } catch {}
+    } catch {
+      // ignore (UI optimistic)
+    }
     setUsers(prev => prev.map(u => u.id === user.id ? { ...u, actif: !u.actif } : u));
   };
 

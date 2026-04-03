@@ -71,12 +71,17 @@ class ImportAlertsUsersFromExcel extends Command
             if (! is_array($row)) {
                 continue;
             }
-            foreach ($row as $cell) {
-                if (is_string($cell) && Str::contains(Str::lower($cell), 'id alert')) {
-                    $headerRowIndex = $ri;
-                    $headers = $this->normalizeHeaders($row);
-                    break 2;
-                }
+            $flat = array_map(fn ($v) => is_string($v) ? Str::lower(trim($v)) : '', $row);
+            $joined = implode(' | ', $flat);
+
+            $hasIdAlert = str_contains($joined, 'id alert');
+            $hasService = str_contains($joined, 'service');
+            $hasDate = str_contains($joined, 'start date') || str_contains($joined, 'date debut') || ($hasService && str_contains($joined, 'date'));
+
+            if ($hasIdAlert || ($hasService && $hasDate)) {
+                $headerRowIndex = $ri;
+                $headers = $this->normalizeHeaders($row);
+                break;
             }
         }
 
@@ -94,6 +99,8 @@ class ImportAlertsUsersFromExcel extends Command
         }
 
         $inserted = 0;
+        $skippedNoService = 0;
+        $skippedNoDate = 0;
         for ($ri = $headerRowIndex + 1; $ri < count($sheet); $ri++) {
             $row = $sheet[$ri] ?? null;
             if (! is_array($row)) {
@@ -111,11 +118,13 @@ class ImportAlertsUsersFromExcel extends Command
 
             $nomService = $this->cleanStr($get('nom_service'));
             if ($nomService === null) {
+                $skippedNoService++;
                 continue;
             }
 
             $startDate = $this->parseExcelDate($get('start_date'));
             if ($startDate === null) {
+                $skippedNoDate++;
                 continue;
             }
 
@@ -137,6 +146,10 @@ class ImportAlertsUsersFromExcel extends Command
             $inserted++;
         }
 
+        if (($skippedNoService + $skippedNoDate) > 0) {
+            $this->warn("Alertes ignorees: sans_service={$skippedNoService}, sans_date={$skippedNoDate}");
+        }
+
         return $inserted;
     }
 
@@ -153,24 +166,41 @@ class ImportAlertsUsersFromExcel extends Command
             $l = Str::lower(trim((string) $label));
             $l = str_replace(['é', 'è', 'ê'], 'e', $l);
 
-            if (str_contains($l, 'start date') || str_contains($l, 'date')) {
+            if (! isset($out['start_date']) && (str_contains($l, 'start date') || str_contains($l, 'date debut') || $l === 'date')) {
                 $out['start_date'] = $idx;
-            } elseif (str_contains($l, 'nom du service') || ($l === 'nom service')) {
+                continue;
+            }
+            if (! isset($out['nom_service']) && (str_contains($l, 'nom du service') || $l === 'nom service' || $l === 'service' || str_contains($l, 'service'))) {
                 $out['nom_service'] = $idx;
-            } elseif ($l === 'sc' || str_contains($l, 'numero') || str_contains($l, 'court')) {
+                continue;
+            }
+            if (! isset($out['numero_court']) && ($l === 'sc' || str_contains($l, 'numero') || str_contains($l, 'court'))) {
                 $out['numero_court'] = $idx;
-            } elseif (str_contains($l, 'keyword')) {
+                continue;
+            }
+            if (! isset($out['keyword']) && str_contains($l, 'keyword')) {
                 $out['keyword'] = $idx;
-            } elseif (str_contains($l, 'fournisseur')) {
+                continue;
+            }
+            if (! isset($out['nom_fournisseur']) && str_contains($l, 'fournisseur')) {
                 $out['nom_fournisseur'] = $idx;
-            } elseif (str_contains($l, 'augmentation') || str_contains($l, '20%') || str_contains($l, 'seuil')) {
+                continue;
+            }
+            if (! isset($out['seuil_pct']) && (str_contains($l, 'augmentation') || str_contains($l, '20%') || str_contains($l, 'seuil'))) {
                 $out['seuil_pct'] = $idx;
-            } elseif (str_contains($l, 'count') || str_contains($l, 'sms')) {
+                continue;
+            }
+            if (! isset($out['count_nb_sms']) && (str_contains($l, 'count') || str_contains($l, 'nb sms') || $l === 'sms')) {
                 $out['count_nb_sms'] = $idx;
-            } elseif (str_contains($l, 'motif')) {
+                continue;
+            }
+            if (! isset($out['motif']) && str_contains($l, 'motif')) {
                 $out['motif'] = $idx;
-            } elseif (str_contains($l, 'status')) {
+                continue;
+            }
+            if (! isset($out['status']) && str_contains($l, 'status')) {
                 $out['status'] = $idx;
+                continue;
             }
         }
 
