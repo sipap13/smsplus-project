@@ -14,6 +14,8 @@ class RaTUsersSeeder extends Seeder
             [
                 'email'     => 'admin@tt.tn',
                 'password'  => Hash::make('admin123'),
+                'nom'       => 'Administrateur',
+                'numero_personnel' => 'USR-001',
                 'direction' => 'Assurance et Fraude',
                 'role'      => 'ADMIN',
                 'tel'       => '+216 71 000 001',
@@ -22,6 +24,8 @@ class RaTUsersSeeder extends Seeder
             [
                 'email'     => 'analyste.op@tt.tn',
                 'password'  => Hash::make('op123'),
+                'nom'       => 'Analyste Operations',
+                'numero_personnel' => 'USR-002',
                 'direction' => 'Assurance et Fraude',
                 'role'      => 'ANALYSTE_OP',
                 'tel'       => '+216 71 000 002',
@@ -30,6 +34,8 @@ class RaTUsersSeeder extends Seeder
             [
                 'email'     => 'analyste.buss@tt.tn',
                 'password'  => Hash::make('buss123'),
+                'nom'       => 'Analyste Business',
+                'numero_personnel' => 'USR-003',
                 'direction' => 'Assurance et Fraude',
                 'role'      => 'ANALYSTE_BUSS',
                 'tel'       => '+216 71 000 003',
@@ -38,13 +44,20 @@ class RaTUsersSeeder extends Seeder
         ];
 
         foreach ($rows as $row) {
-            DB::table('ra_t_users')->updateOrInsert(
-                ['email' => $row['email']],
-                array_merge($row, [
-                    'updated_at' => now(),
-                    'created_at' => DB::raw("COALESCE(created_at, '" . now()->toDateTimeString() . "')"),
-                ])
-            );
+            $existing = DB::table('ra_t_users')->where('email', $row['email'])->first();
+            if ($existing) {
+                DB::table('ra_t_users')
+                    ->where('email', $row['email'])
+                    ->update(array_merge($row, [
+                        'updated_at' => now(),
+                    ]));
+            } else {
+                DB::table('ra_t_users')
+                    ->insert(array_merge($row, [
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]));
+            }
         }
     }
 }

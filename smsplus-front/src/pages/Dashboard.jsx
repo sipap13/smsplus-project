@@ -4,7 +4,7 @@ import api from '../api/axios';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
-  BarChart, Bar,
+  BarChart, Bar, Legend,
 } from 'recharts';
 import { formatCompactNumber, formatDT } from '../lib/format';
 
@@ -15,6 +15,7 @@ export default function Dashboard({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [includeData, setIncludeData] = useState(false); // inclure call_type=DATA
+  const [mmgVsOcc, setMmgVsOcc] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -28,13 +29,15 @@ export default function Dashboard({ user }) {
         setStats(statsRes.data);
 
         const results = await Promise.allSettled([
-          api.get(`/dashboard/revenus?days=30&limit=300&include_data=${includeData ? 1 : 0}`),
+          api.get(`/dashboard/revenus?days=30&limit=4000&include_data=${includeData ? 1 : 0}`),
           api.get('/services'),
+          api.get(`/dashboard/mmg-vs-occ?days=10&include_data=${includeData ? 1 : 0}`),
         ]);
 
         if (!mounted) return;
 
-        const [revenusRes, servicesRes] = results;
+        const [revenusRes, servicesRes, mmgVsOccRes] = results;
+        setMmgVsOcc(mmgVsOccRes.status === 'fulfilled' ? mmgVsOccRes.value.data : []);
         let dayRevenus = revenusRes.status === 'fulfilled' ? revenusRes.value.data : [];
         setServices(servicesRes.status === 'fulfilled' ? servicesRes.value.data : []);
 
@@ -62,9 +65,8 @@ export default function Dashboard({ user }) {
   }, [includeData]);
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: '#888' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: 'var(--text-muted)' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
         <p>Chargement du tableau de bord...</p>
       </div>
     </div>
@@ -72,13 +74,13 @@ export default function Dashboard({ user }) {
 
   if (!stats) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: '#666' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: 'var(--text-muted)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚠️</div>
           <p style={{ marginBottom: '0.75rem' }}>Erreur de chargement.</p>
           <button
             onClick={() => window.location.reload()}
-            style={{ border: 'none', borderRadius: '8px', padding: '0.5rem 0.9rem', cursor: 'pointer', background: '#e8eaf6', color: '#1a237e', fontWeight: 600 }}
+            className="btn btn-soft"
+            type="button"
           >
             Reessayer
           </button>
@@ -127,119 +129,138 @@ export default function Dashboard({ user }) {
   const serviceChartData = hideDataForCharts && nonDominantBarData.length >= 2 ? nonDominantBarData : barData;
   const topServicesData = hideDataForCharts && nonDominantBarData.length >= 2 ? nonDominantBarData : barData;
   const serviceChartTitle = hideDataForCharts && nonDominantBarData.length >= 2
-    ? '📊 Revenus par Service (hors Trafic Data)'
-    : '📊 Revenus par Service';
+    ? 'Revenus par Service (hors Trafic Data)'
+    : 'Revenus par Service';
 
   const kpis = [
     {
-      label: includeData ? 'Revenus Total (incl. Trafic Data)' : 'Revenus SMS+',
+      label: includeData ? 'Revenus totaux (incl. Data)' : 'Revenus totaux',
       value: formatDT(stats.total_revenus),
-      icon: '💰',
+      icon: '↗',
       color: '#1a237e',
       trend: '+12%',
     },
-    { label: 'Abonnés Actifs',   value: formatCompactNumber(stats.abonnes_actifs),  icon: '👥', color: '#0288d1', trend: '+5%' },
-    { label: 'Services Actifs',  value: formatCompactNumber(stats.services_actifs), icon: '📋', color: '#00838f', trend: '—' },
-    { label: "CDR Aujourd'hui",  value: formatCompactNumber(stats.cdr_du_jour),     icon: '📱', color: '#2e7d32', trend: '0' },
+    { label: 'Abonnés actifs',   value: formatCompactNumber(stats.abonnes_actifs),  icon: '↗', color: '#0288d1', trend: '+5%' },
+    { label: 'Total CDR',  value: `${formatCompactNumber(stats.cdr_du_jour)}+`, icon: '•', color: '#00838f', trend: '—' },
+    { label: 'Anomalies détectées',  value: formatCompactNumber((mmgVsOcc || []).filter((x) => Math.abs((x.mmg || 0) - (x.occ || 0)) > 1000).length),     icon: 'AL', color: '#c62828', trend: '0' },
   ];
 
+  const tooltipStyle = { borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-main)' };
+
   return (
-    <div style={{ padding: '2rem', background: '#f8f9ff', minHeight: '100%' }}>
+    <div className="page" style={{ minHeight: '100%' }}>
       {error && (
-        <div style={{ marginBottom: '1rem', background: '#fff3e0', color: '#e65100', border: '1px solid #ffcc80', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.9rem' }}>
-          ⚠️ {error}
+        <div style={{ marginBottom: '1rem', background: 'rgba(245, 158, 11, 0.12)', color: 'var(--text-main)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.9rem' }}>
+          {error}
         </div>
       )}
-      {/* Welcome */}
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={includeData}
-              onChange={(e) => setIncludeData(e.target.checked)}
-            />
-            Inclure `DATA` (Trafic Data)
-          </label>
+      <div className="page-header tt-page-head" style={{ marginBottom: '1.2rem' }}>
+        <div>
+          <h1 className="page-title">Tableau de bord</h1>
+          <p className="page-subtitle">
+            {user?.email?.split('@')[0]} — Assurance & Fraude — SMS+ VAS
+          </p>
         </div>
-        <h1 style={{ margin: 0, color: '#1a237e', fontSize: '1.6rem' }}>
-          👋 Bonjour, <span style={{ color: '#0288d1' }}>{user?.email?.split('@')[0]}</span>
-        </h1>
-        <p style={{ margin: '0.3rem 0 0', color: '#888', fontSize: '0.9rem' }}>
-          {new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-           — Tableau de bord SMS+ Tunisie Telecom
-        </p>
+        <label className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.55rem' }}>
+          <input
+            type="checkbox"
+            checked={includeData}
+            onChange={(e) => setIncludeData(e.target.checked)}
+          />
+          Inclure DATA
+        </label>
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+      <div className="kpi-grid-4" style={{ marginBottom: '1.2rem' }}>
         {kpis.map(k => (
-          <div key={k.label} style={{
-            background: 'white', borderRadius: '16px', padding: '1.5rem',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
-            borderTop: `4px solid ${k.color}`,
-            transition: 'transform 0.2s, box-shadow 0.2s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(0,0,0,0.12)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
-          >
+          <div key={k.label} className="kpi-card tt-kpi" style={{ padding: '1.25rem', borderTopColor: 'transparent' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <p style={{ margin: 0, color: '#999', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{k.label}</p>
-                <h2 style={{ margin: '0.5rem 0 0', color: '#1a237e', fontSize: '1.6rem', fontWeight: 800 }}>{k.value}</h2>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem', fontWeight: 500 }}>{k.label}</p>
+                <h2 className="text-heading num" style={{ margin: '0.4rem 0 0', fontSize: '2rem', fontWeight: 700, color: 'var(--text-main)' }}>{k.value}</h2>
               </div>
-              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: `${k.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>
-                {k.icon}
-              </div>
+              <span className="badge" style={{ background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>{k.icon}</span>
             </div>
-            <p style={{ margin: '1rem 0 0', fontSize: '0.82rem', color: k.trend.startsWith('+') ? '#2e7d32' : '#888' }}>
-              {k.trend !== '—' && k.trend !== '0' ? `📈 ${k.trend} vs mois dernier` : '📊 Données actuelles'}
+            <p style={{ margin: '0.7rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              {k.trend !== '—' && k.trend !== '0' ? `${k.trend} vs période précédente` : 'Volume traité actuel'}
             </p>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+      {/* MMG vs OCC — aligné rapport « Trafic SMS+ » */}
+      <div className="surface surface-pad" style={{ marginBottom: '1.2rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 className="text-heading" style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>Trafic MMG vs OCC</h3>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Volume CDR journalier (10 derniers jours)</p>
+        </div>
+        {mmgVsOcc.length === 0 ? (
+          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>Aucune donnée MMG/OCC sur cette période</p>
+        ) : (
+          <div style={{ width: '100%', minHeight: 300 }}>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={mmgVsOcc} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} interval={0} angle={-35} textAnchor="end" height={56} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatCompactNumber} />
+                <Tooltip
+                  formatter={(v) => [formatCompactNumber(v), '']}
+                  labelFormatter={(l) => `Date : ${l}`}
+                  contentStyle={tooltipStyle}
+                />
+                <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-muted)' }} />
+                <Bar dataKey="mmg" name="MMG" fill="#1f2f74" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                <Bar dataKey="occ" name="OCC" fill="#5c6c9e" radius={[4, 4, 0, 0]} maxBarSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="grid-2" style={{ gridTemplateColumns: '2fr 1fr', marginBottom: '1.2rem' }}>
         {/* Area chart */}
-        <div style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ margin: '0 0 1.5rem', color: '#1a237e', fontSize: '1rem', fontWeight: 700 }}>📈 Évolution des Revenus</h3>
+        <div className="surface surface-pad">
+          <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)' }}>Revenus par service</h3>
           {chartData.length === 0 ? (
-            <p style={{ textAlign: 'center', color: '#ccc', padding: '3rem 0' }}>Aucune donnée disponible</p>
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem 0' }}>Aucune donnée disponible</p>
           ) : (
+            <div style={{ width: '100%', minHeight: 260 }}>
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1a237e" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#1a237e" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#243776" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#243776" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#888' }} tickFormatter={formatCompactNumber} />
-                <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} contentStyle={{ borderRadius: '8px', border: '1px solid #e8eaf6' }} />
-                <Area type="monotone" dataKey="total" stroke="#1a237e" strokeWidth={2} fill="url(#colorTotal)" name="Revenus (DT)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatCompactNumber} />
+                <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="total" stroke="#243776" strokeWidth={2.2} fill="url(#colorTotal)" name="Revenus (DT)" />
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           )}
         </div>
 
         {/* Top services */}
-        <div style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ margin: '0 0 1.5rem', color: '#1a237e', fontSize: '1rem', fontWeight: 700 }}>🏆 Top Services</h3>
+        <div className="surface surface-pad">
+          <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)' }}>Meilleurs services</h3>
           {topServicesData.length === 0 ? (
-            <p style={{ textAlign: 'center', color: '#ccc', padding: '3rem 0' }}>Aucune donnée</p>
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem 0' }}>Aucune donnée</p>
           ) : topServicesData.slice(0, 5).map((s, i) => {
             const max = topServicesData[0]?.total || 1;
             const pct = ((s.total / max) * 100).toFixed(0);
             return (
               <div key={s.name} style={{ marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#333' }}>{s.name}</span>
-                  <span style={{ fontSize: '0.82rem', color: '#1a237e', fontWeight: 700 }}>{formatDT(s.total)}</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{s.name}</span>
+                  <span className="text-heading" style={{ fontSize: '0.82rem', fontWeight: 700 }}>{formatDT(s.total)}</span>
                 </div>
-                <div style={{ background: '#f0f4ff', borderRadius: '6px', height: '6px' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: `hsl(${220 + i * 20}, 70%, ${50 + i * 5}%)`, borderRadius: '6px', transition: 'width 0.5s' }} />
+                <div style={{ background: 'var(--table-head-bg)', borderRadius: '6px', height: '6px' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: i % 2 ? '#5c6c9e' : '#1f2f74', borderRadius: '6px', transition: 'width 0.5s' }} />
                 </div>
               </div>
             );
@@ -249,17 +270,19 @@ export default function Dashboard({ user }) {
 
       {/* Bar chart by service */}
       {serviceChartData.length > 0 && (
-        <div style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ margin: '0 0 1.5rem', color: '#1a237e', fontSize: '1rem', fontWeight: 700 }}>{serviceChartTitle}</h3>
+        <div className="saas-surface" style={{ borderRadius: '10px', padding: '1.2rem' }}>
+          <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem', fontWeight: 700 }}>{serviceChartTitle}</h3>
+          <div style={{ width: '100%', minHeight: 240 }}>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={serviceChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#888' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#888' }} tickFormatter={formatCompactNumber} />
-              <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} contentStyle={{ borderRadius: '8px' }} />
-              <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#0288d1" name="Revenus (DT)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatCompactNumber} />
+              <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} contentStyle={tooltipStyle} />
+              <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#1f2f74" name="Revenus (DT)" />
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>

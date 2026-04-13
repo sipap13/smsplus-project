@@ -11,15 +11,16 @@ services:
       - smsplus_pgdata:/var/lib/postgresql/data
 
   api:
-    image: php:8.2-cli
+    build:
+      context: ./smsplus-api
+      dockerfile: Dockerfile
     working_dir: /app
-    volumes:
-      - ./smsplus-api:/app
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
+      APP_KEY: base64:aySyHJL24LfllZHsrJoy9urDATK9x36ecbI0cnV+NF8=
       DB_CONNECTION: pgsql
       DB_HOST: db
       DB_PORT: 5432
@@ -30,7 +31,6 @@ services:
       - db
     command: >
       sh -lc "php -v
-      && php artisan key:generate --force
       && php artisan migrate --force
       && php artisan serve --host=0.0.0.0 --port=8000"
 
@@ -39,14 +39,30 @@ services:
     working_dir: /app
     volumes:
       - ./smsplus-front:/app
+      - smsplus_front_node_modules:/app/node_modules
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://localhost:8000/api
+      VITE_API_URL: http://127.0.0.1:8001/api
     command: >
       sh -lc "npm ci || npm install
       && npm run dev -- --host 0.0.0.0 --port 5173"
 
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - db
+
 volumes:
   smsplus_pgdata:
+  smsplus_front_node_modules:
 

@@ -38,7 +38,10 @@ class AuthController extends Controller
 
         DB::table('ra_t_users')
             ->where('id', $user->id)
-            ->update(['updated_at' => now()]);
+            ->update([
+                'last_login_at' => now(),
+                'updated_at' => now(),
+            ]);
 
         return response()->json([
             'token' => $plainToken,

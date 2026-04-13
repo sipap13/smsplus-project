@@ -1,18 +1,68 @@
+/* eslint-disable react/prop-types */
 import { useState } from 'react';
 import api from '../api/axios';
+import { formatDT } from '../lib/format';
+
+const OCC_COLS = [
+  { key: 'a_msisdn', label: 'A' },
+  { key: 'b_msisdn', label: 'B' },
+  { key: 'start_date', label: 'Date' },
+  { key: 'start_hour', label: 'H' },
+  { key: 'call_type', label: 'Call' },
+  { key: 'event_type', label: 'Event' },
+  { key: 'subscriber_type', label: 'Ab.' },
+  { key: 'charge_amount', label: 'Montant' },
+  { key: 'keyword', label: 'Kw' },
+];
+
+const MMG_COLS = [
+  { key: 'ne', label: 'NE' },
+  { key: 'a_msisdn', label: 'A' },
+  { key: 'b_msisdn', label: 'B' },
+  { key: 'start_date', label: 'Date' },
+  { key: 'start_hour', label: 'H' },
+  { key: 'event_type', label: 'Event' },
+  { key: 'event_status', label: 'Statut' },
+  { key: 'subscriber_type', label: 'Ab.' },
+  { key: 'service_type', label: 'Svc' },
+];
 
 export default function MsisdnSearch() {
-  const [msisdn, setMsisdn]     = useState('');
-  const [results, setResults]   = useState(null);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [msisdn, setMsisdn] = useState('');
+  const [reclamations, setReclamations] = useState(null);
+  const [cdr, setCdr] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const search = async () => {
-    if (!msisdn.trim()) { setError('Veuillez saisir un numéro MSISDN'); return; }
-    setLoading(true); setError(''); setResults(null);
+    const q = msisdn.trim();
+    if (!q) {
+      setError('Veuillez saisir un numéro MSISDN');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setReclamations(null);
+    setCdr(null);
+    const enc = encodeURIComponent(q);
     try {
-      const res = await api.get(`/reclamations/${msisdn.trim()}`);
-      setResults(res.data);
+      const [recRes, cdrRes] = await Promise.allSettled([
+        api.get(`/reclamations/${enc}`),
+        api.get(`/cdr/msisdn/${enc}`),
+      ]);
+      if (recRes.status === 'fulfilled') {
+        setReclamations(recRes.value.data);
+      } else {
+        setReclamations([]);
+      }
+      if (cdrRes.status === 'fulfilled') {
+        setCdr(cdrRes.value.data);
+      } else {
+        setCdr(null);
+        if (recRes.status === 'rejected') {
+          setError('Erreur lors de la recherche');
+        }
+      }
     } catch {
       setError('Erreur lors de la recherche');
     } finally {
@@ -20,107 +70,159 @@ export default function MsisdnSearch() {
     }
   };
 
-  const statusColor = (s) => ({ ouverte: '#e65100', en_cours: '#0288d1', resolue: '#2e7d32' }[s] || '#666');
-  const statusBg    = (s) => ({ ouverte: '#fff3e0', en_cours: '#e3f2fd', resolue: '#e8f5e9' }[s] || '#f5f5f5');
+  const statusBadge = (s) => ({ ouverte: 'badge-warn', en_cours: 'badge', resolue: 'badge-ok' }[s] || 'badge');
+
+  const renderMiniTable = (rows, cols, emptyMsg) => (
+    <div style={{ overflow: 'auto', maxHeight: '420px' }}>
+      <table className="table-mobile" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+        <thead>
+          <tr>
+            {cols.map((c) => (
+              <th key={c.key} style={{ padding: '0.45rem 0.4rem', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={cols.length} style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)' }}>{emptyMsg}</td>
+            </tr>
+          ) : (
+            rows.map((row) => (
+              <tr key={row.id}>
+                {cols.map((c) => (
+                  <td key={c.key} style={{ padding: '0.4rem', fontFamily: c.key.includes('msisdn') ? 'monospace' : 'inherit', color: 'var(--text-main)' }}>
+                    {c.key === 'charge_amount' ? formatDT(row.charge_amount) : (row[c.key] ?? '—')}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1 style={{ margin: '0 0 0.4rem', color: '#1a237e', fontSize: '1.6rem' }}>🔍 Recherche par MSISDN</h1>
-      <p style={{ margin: '0 0 2rem', color: '#888', fontSize: '0.9rem' }}>Recherchez les réclamations d&apos;un abonné par son numéro</p>
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Recherche réclamations & CDR</h1>
+          <p className="page-subtitle">CDR OCC & MMG côte à côte, et réclamations associées</p>
+        </div>
+      </div>
 
-      {/* Search bar */}
-      <div style={{
-        background: 'white', borderRadius: '12px', padding: '1.5rem',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.08)', marginBottom: '1.5rem',
-      }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.9rem', color: '#444' }}>
-              Numéro MSISDN
-            </label>
-            <input
-              type="text"
-              value={msisdn}
-              onChange={e => setMsisdn(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && search()}
-              placeholder="ex: 21698542320"
-              style={{
-                width: '100%', padding: '0.85rem 1rem',
-                border: '2px solid #e0e0e0', borderRadius: '10px',
-                fontSize: '1rem', boxSizing: 'border-box',
-                fontFamily: 'monospace',
-              }}
-            />
-          </div>
-          <button
-            onClick={search}
-            disabled={loading}
-            style={{
-              padding: '0.85rem 2rem',
-              background: 'linear-gradient(135deg, #1a237e, #0288d1)',
-              color: 'white', border: 'none', borderRadius: '10px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontWeight: 700, fontSize: '0.95rem',
-              boxShadow: '0 4px 12px rgba(26,35,126,0.3)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {loading ? '⏳ Recherche...' : '🔍 Rechercher'}
+      <div className="command-bar" style={{ marginBottom: '1rem' }}>
+        <div className="field" style={{ flex: '2 1 320px' }}>
+          <div className="field-label">MSISDN</div>
+          <input
+            className="field-control mono"
+            type="text"
+            value={msisdn}
+            onChange={(e) => setMsisdn(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && search()}
+            placeholder="ex: 21698542320"
+          />
+        </div>
+        <div className="command-actions">
+          <button type="button" onClick={search} disabled={loading} className="btn btn-primary" style={{ opacity: loading ? 0.75 : 1 }}>
+            {loading ? 'Recherche...' : 'Rechercher'}
           </button>
         </div>
         {error && (
-          <p style={{ margin: '0.75rem 0 0', color: '#c62828', fontSize: '0.9rem' }}>⚠️ {error}</p>
+          <div style={{ flexBasis: '100%', color: 'var(--danger)', fontSize: '0.9rem' }}>{error}</div>
         )}
       </div>
 
-      {/* Results */}
-      {results !== null && (
-        <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-          <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, color: '#1a237e' }}>
-              Résultats pour <span style={{ fontFamily: 'monospace', background: '#e8eaf6', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>{msisdn}</span>
-            </h3>
-            <span style={{ background: results.length > 0 ? '#fff3e0' : '#e8f5e9', color: results.length > 0 ? '#e65100' : '#2e7d32', padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600 }}>
-              {results.length} réclamation(s)
-            </span>
+      {(cdr || reclamations !== null) && (
+        <>
+          <h3 className="text-heading" style={{ fontSize: '1rem', margin: '0 0 0.75rem' }}>Transactions CDR</h3>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
+              gap: '1rem',
+              marginBottom: '1.75rem',
+            }}
+          >
+            <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <strong className="text-heading" style={{ fontSize: '0.95rem' }}>OCC</strong>
+                {cdr && (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {cdr.occ_total?.toLocaleString('fr-FR') ?? 0} ligne(s)
+                    {cdr.occ_truncated ? ` — affichage limité à ${cdr.occ_shown}` : ''}
+                  </span>
+                )}
+              </div>
+              {cdr ? renderMiniTable(cdr.occ || [], OCC_COLS, 'Aucun enregistrement OCC') : (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>—</p>
+              )}
+            </div>
+            <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <strong className="text-heading" style={{ fontSize: '0.95rem' }}>MMG</strong>
+                {cdr && (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {cdr.mmg_total?.toLocaleString('fr-FR') ?? 0} ligne(s)
+                    {cdr.mmg_truncated ? ` — affichage limité à ${cdr.mmg_shown}` : ''}
+                  </span>
+                )}
+              </div>
+              {cdr ? renderMiniTable(cdr.mmg || [], MMG_COLS, 'Aucun enregistrement MMG') : (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Données CDR non disponibles</p>
+              )}
+            </div>
           </div>
 
-          {results.length === 0 ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: '#888' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
-              <p style={{ margin: 0, fontSize: '1rem' }}>Aucune réclamation pour ce numéro</p>
+          <div className="panel table-wrap" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h3 className="text-heading" style={{ margin: 0 }}>
+                Réclamations pour <span className="chip mono">{msisdn.trim()}</span>
+              </h3>
+              <span className={`badge ${reclamations.length > 0 ? 'badge-warn' : 'badge-ok'}`}>
+                {reclamations.length} réclamation(s)
+              </span>
             </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f5f7ff' }}>
-                  {['ID', 'Description', 'Service', 'Statut', 'Date'].map(h => (
-                    <th key={h} style={{ padding: '1rem', textAlign: 'left', fontSize: '0.85rem', color: '#666', fontWeight: 600, borderBottom: '2px solid #e8eaf6' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r, i) => (
-                  <tr key={r.id} style={{ background: i % 2 === 0 ? 'white' : '#fafafa' }}>
-                    <td style={{ padding: '0.875rem 1rem', fontFamily: 'monospace', color: '#888', fontSize: '0.85rem' }}>#{r.id}</td>
-                    <td style={{ padding: '0.875rem 1rem', color: '#333' }}>{r.description}</td>
-                    <td style={{ padding: '0.875rem 1rem', color: '#666', fontSize: '0.9rem' }}>{r.service?.nom_service || '—'}</td>
-                    <td style={{ padding: '0.875rem 1rem' }}>
-                      <span style={{ background: statusBg(r.statut), color: statusColor(r.statut), padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.82rem', fontWeight: 600 }}>
-                        {r.statut}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.875rem 1rem', color: '#888', fontSize: '0.85rem' }}>
-                      {new Date(r.created_at).toLocaleDateString('fr-FR')}
-                    </td>
+
+            {reclamations.length === 0 ? (
+              <div className="empty-state" style={{ padding: '2rem' }}>
+                <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-muted)' }}>Aucune réclamation pour ce numéro</p>
+              </div>
+            ) : (
+              <table className="table-mobile table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    {['ID', 'Description', 'Service', 'Statut', 'Date'].map((h) => (
+                      <th key={h} style={{ padding: '1rem', textAlign: 'left', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '2px solid var(--border)' }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                </thead>
+                <tbody>
+                  {reclamations.map((r) => (
+                    <tr key={r.id}>
+                      <td data-label="ID" className="mono" style={{ padding: '0.875rem 1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>#{r.id}</td>
+                      <td data-label="Description" style={{ padding: '0.875rem 1rem', color: 'var(--text-main)' }}>{r.description}</td>
+                      <td data-label="Service" style={{ padding: '0.875rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{r.service?.nom_service || '—'}</td>
+                      <td data-label="Statut" style={{ padding: '0.875rem 1rem' }}>
+                        <span className={`badge ${statusBadge(r.statut)}`}>
+                          {r.statut}
+                        </span>
+                      </td>
+                      <td data-label="Date" style={{ padding: '0.875rem 1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        {new Date(r.created_at).toLocaleDateString('fr-FR')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

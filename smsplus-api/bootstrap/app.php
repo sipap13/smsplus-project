@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.api' => \App\Http\Middleware\AuthenticateApiToken::class,
             'role' => \App\Http\Middleware\RequireRole::class,
         ]);
+        $middleware->appendToGroup('api', \App\Http\Middleware\TrackApiRequestMetrics::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -1,147 +1,287 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
+import Modal from '../components/Modal';
 
 const ROLES = ['ADMIN', 'ANALYSTE_OP', 'ANALYSTE_BUSS'];
 
-export default function Users() {
-  const [users, setUsers]     = useState([]);
+const emptyUserForm = () => ({
+  nom: '',
+  email: '',
+  password: '',
+  numero_personnel: '',
+  direction: 'Assurance et Fraude',
+  role: 'ANALYSTE_OP',
+  tel: '',
+});
+
+export default function Users({ user: currentUser }) {
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: '', password: '', direction: 'Assurance et Fraude', role: 'ANALYSTE_OP', tel: '' });
-  const [msg, setMsg]   = useState('');
+  const [form, setForm] = useState(emptyUserForm);
+  const [msg, setMsg] = useState('');
+  const [busyId, setBusyId] = useState(null);
+
+  const myId = currentUser?.id;
 
   const load = () => {
     setLoading(true);
-    api.get('/users').then(r => { setUsers(r.data); setLoading(false); })
+    setError('');
+    api
+      .get('/users')
+      .then((r) => {
+        setUsers(r.data);
+        setLoading(false);
+      })
       .catch(() => {
-        // Demo fallback
-        setUsers([
-          { id: 1, email: 'admin@tt.tn', direction: 'Assurance et Fraude', role: 'ADMIN', tel: '+216 71 000 001', actif: true, created_at: '2026-03-31' },
-          { id: 2, email: 'analyste.op@tt.tn', direction: 'Assurance et Fraude', role: 'ANALYSTE_OP', tel: '+216 71 000 002', actif: true, created_at: '2026-03-31' },
-          { id: 3, email: 'analyste.buss@tt.tn', direction: 'Assurance et Fraude', role: 'ANALYSTE_BUSS', tel: '+216 71 000 003', actif: true, created_at: '2026-03-31' },
-        ]);
+        setError("Impossible de charger les utilisateurs. Vérifie l'API.");
+        setUsers([]);
         setLoading(false);
       });
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  const save = async () => {
-    if (!form.email || !form.password) { setMsg('❌ Email et mot de passe requis'); return; }
+  const saveNew = async () => {
+    if (!form.email?.trim() || !form.password) {
+      setMsg('Email et mot de passe requis');
+      setTimeout(() => setMsg(''), 3000);
+      return;
+    }
     try {
       await api.post('/users', form);
-      setMsg('✅ Utilisateur créé avec succès');
+      setMsg('Utilisateur créé avec succès');
       setShowForm(false);
+      setForm(emptyUserForm());
       load();
     } catch {
-      setMsg('❌ Erreur lors de la création');
+      setMsg('Erreur lors de la création (email déjà utilisé ?)');
+    }
+    setTimeout(() => setMsg(''), 4000);
+  };
+
+  const toggleActive = async (u) => {
+    if (u.id === myId && u.actif) {
+      setMsg('Tu ne peux pas désactiver ton propre compte');
+      setTimeout(() => setMsg(''), 3500);
+      return;
+    }
+    setBusyId(u.id);
+    try {
+      await api.put(`/users/${u.id}`, { actif: !u.actif });
+      setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, actif: !row.actif } : row)));
+      setMsg('Statut mis à jour');
+    } catch {
+      setMsg('Erreur lors du changement de statut');
+    } finally {
+      setBusyId(null);
     }
     setTimeout(() => setMsg(''), 3000);
   };
 
-  const toggleActive = async (user) => {
+  const changeRole = async (u, newRole) => {
+    if (newRole === u.role) return;
+    setBusyId(u.id);
     try {
-      await api.put(`/users/${user.id}`, { actif: !user.actif });
+      await api.put(`/users/${u.id}`, { role: newRole });
+      setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, role: newRole } : row)));
+      setMsg('Rôle mis à jour');
     } catch {
-      // ignore (UI optimistic)
+      setMsg('Impossible de modifier le rôle');
+    } finally {
+      setBusyId(null);
     }
-    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, actif: !u.actif } : u));
+    setTimeout(() => setMsg(''), 3000);
   };
 
-  const roleColor = (r) => ({ ADMIN: '#4a148c', ANALYSTE_OP: '#0288d1', ANALYSTE_BUSS: '#2e7d32' }[r] || '#666');
-  const roleBg    = (r) => ({ ADMIN: '#f3e5f5', ANALYSTE_OP: '#e3f2fd', ANALYSTE_BUSS: '#e8f5e9' }[r] || '#f5f5f5');
+  const bannerOk = !/erreur|impossible|requis/i.test(msg);
+
+  const fmtId = (id) => `USR-${String(id).padStart(3, '0')}`;
+  const fmtRole = (r) => ({ ADMIN: 'Admin', ANALYSTE_OP: 'Analyste OP', ANALYSTE_BUSS: 'Analyste BUSS' }[r] || r);
+  const fmtDT = (v) => {
+    if (!v) return '—';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  };
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+    <div className="page">
+      <div className="page-header">
         <div>
-          <h1 style={{ margin: 0, color: '#1a237e', fontSize: '1.6rem' }}>👥 Gestion des Utilisateurs</h1>
-          <p style={{ margin: '0.3rem 0 0', color: '#888', fontSize: '0.9rem' }}>{users.length} utilisateur(s) enregistré(s)</p>
+          <h1 className="page-title">Gestion des utilisateurs</h1>
+          <p className="page-subtitle">{users.length} utilisateur(s) — réservé aux administrateurs</p>
         </div>
-        <button onClick={() => { setShowForm(true); setForm({ email: '', password: '', direction: 'Assurance et Fraude', role: 'ANALYSTE_OP', tel: '' }); }} style={{
-          background: 'linear-gradient(135deg, #1a237e, #0288d1)', color: 'white',
-          border: 'none', borderRadius: '10px', padding: '0.75rem 1.5rem',
-          cursor: 'pointer', fontWeight: 700, fontSize: '0.95rem',
-          boxShadow: '0 4px 12px rgba(26,35,126,0.3)',
-        }}>
-          + Ajouter un utilisateur
+        <button
+          type="button"
+          onClick={() => {
+            setForm(emptyUserForm());
+            setShowForm(true);
+          }}
+          className="btn btn-primary"
+        >
+          Ajouter un utilisateur
         </button>
       </div>
 
       {msg && (
-        <div style={{
-          padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem',
-          background: msg.includes('✅') ? '#e8f5e9' : '#ffebee',
-          color: msg.includes('✅') ? '#2e7d32' : '#c62828',
-          border: `1px solid ${msg.includes('✅') ? '#a5d6a7' : '#ef9a9a'}`,
-        }}>{msg}</div>
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            background: bannerOk ? 'rgba(46, 125, 50, 0.12)' : 'rgba(198, 40, 40, 0.12)',
+            color: 'var(--text-main)',
+            border: `1px solid ${bannerOk ? 'rgba(46, 125, 50, 0.35)' : 'rgba(198, 40, 40, 0.35)'}`,
+          }}
+        >
+          {msg}
+        </div>
       )}
-
-      {/* Modal */}
-      {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '450px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <h2 style={{ margin: '0 0 1.5rem', color: '#1a237e' }}>➕ Nouvel utilisateur</h2>
-            {[
-              { key: 'email', label: 'Email', placeholder: 'user@tt.tn', type: 'email' },
-              { key: 'password', label: 'Mot de passe', placeholder: '••••••••', type: 'password' },
-              { key: 'direction', label: 'Direction', placeholder: 'Assurance et Fraude' },
-              { key: 'tel', label: 'Téléphone', placeholder: '+216 71 000 000' },
-            ].map(f => (
-              <div key={f.key} style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600, fontSize: '0.9rem', color: '#444' }}>{f.label}</label>
-                <input type={f.type || 'text'} value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} placeholder={f.placeholder}
-                  style={{ width: '100%', padding: '0.7rem 1rem', border: '2px solid #e0e0e0', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }} />
-              </div>
-            ))}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600, fontSize: '0.9rem', color: '#444' }}>Rôle</label>
-              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
-                style={{ width: '100%', padding: '0.7rem 1rem', border: '2px solid #e0e0e0', borderRadius: '8px', fontSize: '0.95rem' }}>
-                {ROLES.map(r => <option key={r}>{r}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowForm(false)} style={{ padding: '0.7rem 1.5rem', border: '2px solid #e0e0e0', background: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Annuler</button>
-              <button onClick={save} style={{ padding: '0.7rem 1.5rem', background: 'linear-gradient(135deg, #1a237e, #0288d1)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>Créer</button>
-            </div>
-          </div>
+      {error && (
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            background: 'rgba(198, 40, 40, 0.1)',
+            color: 'var(--text-main)',
+            border: '1px solid rgba(198, 40, 40, 0.35)',
+          }}
+        >
+          {error}
         </div>
       )}
 
-      {/* Users cards */}
-      {loading ? <p style={{ textAlign: 'center', color: '#888', padding: '3rem' }}>Chargement...</p> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-          {users.map(u => (
-            <div key={u.id} style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', borderTop: `4px solid ${roleColor(u.role)}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: roleBg(u.role), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
-                  {u.role === 'ADMIN' ? '👑' : u.role === 'ANALYSTE_OP' ? '🔬' : '📊'}
-                </div>
-                <span style={{ background: u.actif ? '#e8f5e9' : '#ffebee', color: u.actif ? '#2e7d32' : '#c62828', padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600 }}>
-                  {u.actif ? 'Actif' : 'Inactif'}
-                </span>
-              </div>
-              <p style={{ margin: '0 0 0.25rem', fontWeight: 700, color: '#1a237e', fontSize: '0.95rem' }}>{u.email}</p>
-              <span style={{ background: roleBg(u.role), color: roleColor(u.role), padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600 }}>{u.role.replace('_', ' ')}</span>
-              <div style={{ marginTop: '1rem', fontSize: '0.82rem', color: '#888', lineHeight: '1.6' }}>
-                {u.direction && <p style={{ margin: 0 }}>🏢 {u.direction}</p>}
-                {u.tel && <p style={{ margin: 0 }}>📞 {u.tel}</p>}
-                <p style={{ margin: 0 }}>📅 Créé le {new Date(u.created_at).toLocaleDateString('fr-FR')}</p>
-              </div>
-              {u.role !== 'ADMIN' && (
-                <button onClick={() => toggleActive(u)} style={{
-                  marginTop: '1rem', width: '100%', padding: '0.5rem',
-                  background: u.actif ? '#ffebee' : '#e8f5e9',
-                  color: u.actif ? '#c62828' : '#2e7d32',
-                  border: `1px solid ${u.actif ? '#ef9a9a' : '#a5d6a7'}`,
-                  borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-                }}>
-                  {u.actif ? '🚫 Désactiver' : '✅ Activer'}
-                </button>
-              )}
+      {showForm && (
+        <Modal title="Nouvel utilisateur" onClose={() => setShowForm(false)} wide>
+          {[
+            { key: 'nom', label: 'Nom', placeholder: 'ex: Ahmed Ben Ali' },
+            { key: 'email', label: 'Email', placeholder: 'user@tt.tn', type: 'email' },
+            { key: 'password', label: 'Mot de passe', placeholder: '••••••••', type: 'password' },
+            { key: 'numero_personnel', label: 'Numéro personnel', placeholder: 'ex: USR-001' },
+            { key: 'direction', label: 'Direction', placeholder: 'Assurance et Fraude' },
+            { key: 'tel', label: 'Téléphone', placeholder: '+216 71 000 000' },
+          ].map((f) => (
+            <div key={f.key} style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                {f.label}
+              </label>
+              <input
+                type={f.type || 'text'}
+                value={form[f.key]}
+                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                placeholder={f.placeholder}
+                style={{ width: '100%', padding: '0.7rem 1rem', fontSize: '0.95rem', boxSizing: 'border-box' }}
+              />
             </div>
           ))}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>
+              Rôle
+            </label>
+            <select
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+              style={{ width: '100%', padding: '0.7rem 1rem', fontSize: '0.95rem' }}
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r.replace('_', ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={() => setShowForm(false)} className="btn btn-ghost">
+              Annuler
+            </button>
+            <button type="button" onClick={saveNew} className="btn btn-primary">
+              Créer
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {loading ? (
+        <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>Chargement...</p>
+      ) : (
+        <div className="panel table-wrap" style={{ overflow: 'auto' }}>
+          <table className="table-mobile table-dense table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['ID', 'Nom', 'Email', 'Numéro personnel', 'Rôle', 'Actif', 'Dernière connexion', 'Créé le'].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      padding: '0.85rem 1rem',
+                      textAlign: 'left',
+                      fontSize: '0.82rem',
+                      color: 'var(--text-muted)',
+                      fontWeight: 600,
+                      borderBottom: '2px solid var(--border)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td data-label="ID" className="mono" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
+                    {fmtId(u.id)}
+                  </td>
+                  <td data-label="Nom" style={{ padding: '0.75rem 1rem', color: 'var(--text-main)', fontWeight: 600 }}>
+                    {u.nom || '—'}
+                  </td>
+                  <td data-label="Email" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
+                    {u.email}
+                  </td>
+                  <td data-label="Numéro personnel" className="mono" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
+                    {u.numero_personnel || '—'}
+                  </td>
+                  <td data-label="Rôle" style={{ padding: '0.75rem 1rem' }}>
+                    <select
+                      value={u.role}
+                      onChange={(e) => changeRole(u, e.target.value)}
+                      disabled={busyId === u.id}
+                      className="role-select"
+                    >
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {fmtRole(r)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td data-label="Actif" style={{ padding: '0.75rem 1rem' }}>
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={!!u.actif}
+                        disabled={busyId === u.id || (u.id === myId && u.actif)}
+                        onChange={() => toggleActive(u)}
+                      />
+                      Actif
+                    </label>
+                  </td>
+                  <td data-label="Dernière connexion" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                    {fmtDT(u.last_login_at)}
+                  </td>
+                  <td data-label="Créé le" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
