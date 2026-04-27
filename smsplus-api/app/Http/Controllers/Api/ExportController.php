@@ -2,12 +2,87 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exports\AlertsExport;
+use App\Exports\CdrMmgExport;
+use App\Exports\CdrOccExport;
+use App\Exports\ServicesExport;
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ExportController extends Controller
 {
+    public function __construct(
+        protected NotificationService $notificationService
+    ) {}
+
+    /**
+     * Export CDR OCC filtré en Excel
+     */
+    public function exportOcc(Request $request)
+    {
+        $startDate = $request->query('start_date');
+        $keyword = $request->query('keyword');
+        $subscriberType = $request->query('subscriber_type');
+        $partner = $request->query('partner');
+
+        $filename = 'CDR_OCC_'.now()->format('Y-m-d').'.xlsx';
+        $this->notifyReportForRequester($request, now()->format('Y-m'));
+
+        return Excel::download(
+            new CdrOccExport($startDate, $keyword, $subscriberType, $partner),
+            $filename
+        );
+    }
+
+    /**
+     * Export CDR MMG filtré en Excel
+     */
+    public function exportMmg(Request $request)
+    {
+        $startDate = $request->query('start_date');
+        $eventStatus = $request->query('event_status');
+        $subscriberType = $request->query('subscriber_type');
+
+        $filename = 'CDR_MMG_'.now()->format('Y-m-d').'.xlsx';
+        $this->notifyReportForRequester($request, now()->format('Y-m'));
+
+        return Excel::download(
+            new CdrMmgExport($startDate, $eventStatus, $subscriberType),
+            $filename
+        );
+    }
+
+    /**
+     * Export Services en Excel
+     */
+    public function exportServices(Request $request)
+    {
+        $filename = 'Services_'.now()->format('Y-m-d').'.xlsx';
+        $this->notifyReportForRequester($request, now()->format('Y-m'));
+
+        return Excel::download(
+            new ServicesExport,
+            $filename
+        );
+    }
+
+    /**
+     * Export Alertes en Excel
+     */
+    public function exportAlerts(Request $request)
+    {
+        $filename = 'Alertes_'.now()->format('Y-m-d').'.xlsx';
+        $this->notifyReportForRequester($request, now()->format('Y-m'));
+
+        return Excel::download(
+            new AlertsExport,
+            $filename
+        );
+    }
+
     public function revenusCsv(Request $request)
     {
         $allowedCallTypes = ['VAS', 'SMS', 'VOICE'];
@@ -32,7 +107,8 @@ class ExportController extends Controller
             ->limit(20000)
             ->get();
 
-        $filename = 'revenus_export_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'revenus_export_'.now()->format('Ymd_His').'.csv';
+        $this->notifyReportForRequester($request, now()->format('Y-m'));
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
@@ -58,5 +134,15 @@ class ExportController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    private function notifyReportForRequester(Request $request, string $month): void
+    {
+        $user = $request->attributes->get('auth_user');
+        $userId = (int) ($user->id ?? 0);
+        if ($userId <= 0) {
+            return;
+        }
+        $this->notificationService->notifyReportReady($userId, $month);
     }
 }

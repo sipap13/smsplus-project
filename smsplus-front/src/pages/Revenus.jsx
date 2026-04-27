@@ -257,7 +257,7 @@ export default function Revenus() {
           <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem' }}>
             Revenus par {view === 'month' ? 'mois' : (isHourMode ? 'heure' : 'date')}
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
             <BarChart data={view === 'month' ? monthlyChart : barData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey={view === 'month' ? 'period' : 'date'} tick={{ fontSize: 11 }} />
@@ -273,7 +273,7 @@ export default function Revenus() {
           <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem' }}>
             {hideDataInPie && pieDataForChart.length >= 2 ? 'Répartition par service (hors Trafic Data)' : 'Répartition par service'}
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
             <PieChart>
               <Pie data={pieDataForChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                 {pieDataForChart.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}

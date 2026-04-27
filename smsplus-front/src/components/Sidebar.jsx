@@ -31,30 +31,46 @@ function SidebarIcon({ name }) {
       <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1 1 0 0 1 0 1.4l-1 1a1 1 0 0 1-1.4 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1 1 0 0 1-1 1h-1.5a1 1 0 0 1-1-1v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1 1 0 0 1-1.4 0l-1-1a1 1 0 0 1 0-1.4l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a1 1 0 0 1-1-1v-1.5a1 1 0 0 1 1-1h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1 1 0 0 1 0-1.4l1-1a1 1 0 0 1 1.4 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1 1 0 0 1 1-1h1.5a1 1 0 0 1 1 1v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1 1 0 0 1 1.4 0l1 1a1 1 0 0 1 0 1.4l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-.2a1 1 0 0 0-.4.1" /></svg>
     );
   }
+  if (name === 'ai') {
+    return (
+      <svg {...common}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
+    );
+  }
+  if (name === 'predictions') {
+    return (
+      <svg {...common}><path d="M3 3v18h18" /><path d="M7 16l4-6 4 3 5-8" /></svg>
+    );
+  }
+  if (name === 'import') {
+    return (
+      <svg {...common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+    );
+  }
   return <svg {...common}><circle cx="12" cy="12" r="8" /></svg>;
 }
 
-export default function Sidebar({ user, activePage, onNavigate }) {
+export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 }) {
   const isAdmin    = user.role === 'ADMIN';
   const isOp       = user.role === 'ANALYSTE_OP' || isAdmin;
   const isBuss     = user.role === 'ANALYSTE_BUSS' || isAdmin;
 
   const menuItems = [
     { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard', show: true },
-    { id: 'sos', label: 'SOS Solde & Data', icon: 'settings', show: true },
     { id: 'services', label: 'Services VAS', icon: 'services', show: isAdmin || isOp },
     { id: 'msisdn', label: 'Recherche MSISDN', icon: 'services', show: isOp },
     { id: 'cdr-occ', label: 'CDR OCC', icon: 'cdr', show: isBuss || isOp },
     { id: 'cdr-mmg', label: 'CDR MMG', icon: 'cdr', show: isOp },
     { id: 'revenus', label: 'Revenus détaillés', icon: 'dashboard', show: isBuss },
     { id: 'alerts', label: 'Alertes fraude', icon: 'fraud', show: isOp || isAdmin },
+    { id: 'predictions', label: 'Prédictions IA', icon: 'predictions', show: isAdmin || isBuss },
+    { id: 'imports', label: 'Import Données', icon: 'import', show: isAdmin },
     { id: 'users', label: 'Utilisateurs', icon: 'users', show: isAdmin },
   ];
 
   return (
     <div className="app-sidebar">
       <div className="tt-sidebar-brand">
-        <img src="/tt-logo-sidebar-clean.png" alt="Tunisie Telecom" className="tt-logo sidebar" />
+        <img src="/tt-logo-sidebar-clean.png" alt="Tunisie Telecom" className="tt-logo sidebar" onError={(e) => { e.target.style.display='none'; }} />
         <div>
           <p className="tt-sidebar-title">Tunisie Telecom</p>
           <p className="tt-sidebar-sub">SMS+ VAS Platform</p>
@@ -68,6 +84,9 @@ export default function Sidebar({ user, activePage, onNavigate }) {
         >
           <span className="sidebar-icon"><SidebarIcon name={item.icon} /></span>
           <span className="sidebar-label">{item.label}</span>
+          {item.id === 'notifications' && unreadCount > 0 ? (
+            <span className="notif-badge sidebar">{unreadCount > 99 ? '99+' : unreadCount}</span>
+          ) : null}
         </button>
       ))}
 

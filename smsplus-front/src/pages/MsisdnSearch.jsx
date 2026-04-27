@@ -1,7 +1,9 @@
 /* eslint-disable react/prop-types */
+
 import { useState } from 'react';
 import api from '../api/axios';
 import { formatDT } from '../lib/format';
+import MsisdnTimeline from '../components/MsisdnTimeline';
 
 const OCC_COLS = [
   { key: 'a_msisdn', label: 'A' },
@@ -31,6 +33,7 @@ export default function MsisdnSearch() {
   const [msisdn, setMsisdn] = useState('');
   const [reclamations, setReclamations] = useState(null);
   const [cdr, setCdr] = useState(null);
+  const [timelineData, setTimelineData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,17 +47,20 @@ export default function MsisdnSearch() {
     setError('');
     setReclamations(null);
     setCdr(null);
+    setTimelineData(null);
     const enc = encodeURIComponent(q);
     try {
-      const [recRes, cdrRes] = await Promise.allSettled([
+      const [recRes, cdrRes, tlRes] = await Promise.allSettled([
         api.get(`/reclamations/${enc}`),
         api.get(`/cdr/msisdn/${enc}`),
+        api.get(`/cdr/msisdn/${enc}/timeline`),
       ]);
       if (recRes.status === 'fulfilled') {
         setReclamations(recRes.value.data);
       } else {
         setReclamations([]);
       }
+      if (tlRes.status === 'fulfilled') { setTimelineData(tlRes.value.data); } else { setTimelineData(null); }
       if (cdrRes.status === 'fulfilled') {
         setCdr(cdrRes.value.data);
       } else {
@@ -138,6 +144,7 @@ export default function MsisdnSearch() {
 
       {(cdr || reclamations !== null) && (
         <>
+          {timelineData && <MsisdnTimeline data={timelineData} />}
           <h3 className="text-heading" style={{ fontSize: '1rem', margin: '0 0 0.75rem' }}>Transactions CDR</h3>
           <div
             style={{

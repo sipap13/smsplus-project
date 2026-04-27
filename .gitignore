@@ -1,8 +1,23 @@
-
 # Data imports (ne pas pousser)
 smsplus-api/storage/imports/
 
+# Environnement
+.env
+smsplus-front/.env
+smsplus-api/.env
 
-# Data imports (ne pas pousser)
-smsplus-api/storage/imports/
+# Fichiers temporaires
+*.tmp
+temp.sql
+
+# Scripts de génération / réparation (racine)
+/write_*.py
+/write_*.js
+/fix_*.py
+/fix_*.js
+/rebuild_fix.js
+/remove_etl.js
+/gen_predictions.py
+/tmp_write.js
+/pred_part*.tmp
 

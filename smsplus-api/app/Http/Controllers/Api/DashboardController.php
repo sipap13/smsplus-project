@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        protected NotificationService $notificationService,
+    ) {}
+
     public function stats(Request $request)
     {
         $includeData = in_array(strtolower((string) $request->query('include_data', '0')), ['1', 'true', 'yes'], true);
@@ -36,14 +41,14 @@ class DashboardController extends Controller
                 $base->whereIn('call_type', $allowedCallTypes);
             }
 
-            $base->whereDate('start_date', '>=', date('Y-m-d', strtotime($anchorDate . ' -30 days')))
+            $base->whereDate('start_date', '>=', date('Y-m-d', strtotime($anchorDate.' -30 days')))
                 ->whereDate('start_date', '<=', $anchorDate);
 
             return [
-                'total_revenus'   => (float) (clone $base)->sum('charge_amount'),
-                'abonnes_actifs'  => (clone $base)->distinct('a_msisdn')->count('a_msisdn'),
+                'total_revenus' => (float) (clone $base)->sum('charge_amount'),
+                'abonnes_actifs' => (clone $base)->distinct('a_msisdn')->count('a_msisdn'),
                 'services_actifs' => DB::table('ra_t_services')->where('actif', true)->count(),
-                'cdr_du_jour'     => (function () use ($anchorDate, $includeData, $allowedCallTypes) {
+                'cdr_du_jour' => (function () use ($anchorDate, $includeData, $allowedCallTypes) {
                     $q = DB::table('ra_t_occ_cdr_detail');
                     if (! $includeData) {
                         $q->whereIn('call_type', $allowedCallTypes);
@@ -80,7 +85,7 @@ class DashboardController extends Controller
         $anchorDate = $maxDate ?: now()->toDateString();
         $effectiveDate = is_string($date) && trim($date) !== '' ? trim($date) : $anchorDate;
 
-        $cacheKey = "dashboard_revenus_smsplus_" . ($includeData ? 'with_data' : 'no_data') . "_{$granularity}_{$effectiveDate}_{$days}_{$limit}";
+        $cacheKey = 'dashboard_revenus_smsplus_'.($includeData ? 'with_data' : 'no_data')."_{$granularity}_{$effectiveDate}_{$days}_{$limit}";
 
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
         if ($bypassCache) {
@@ -106,7 +111,7 @@ class DashboardController extends Controller
                     ->get();
             }
 
-            $fromDate = date('Y-m-d', strtotime($effectiveDate . " -{$days} days"));
+            $fromDate = date('Y-m-d', strtotime($effectiveDate." -{$days} days"));
 
             $q = DB::table('ra_t_occ_cdr_detail');
             if (! $includeData) {
@@ -124,6 +129,30 @@ class DashboardController extends Controller
                 ->get();
         });
 
+        if ($granularity === 'day' && $data->count() >= 8) {
+            $dailyTotals = [];
+            foreach ($data as $row) {
+                $date = (string) $row->start_date;
+                $dailyTotals[$date] = ($dailyTotals[$date] ?? 0) + (float) ($row->total ?? 0);
+            }
+            ksort($dailyTotals);
+            $dates = array_keys($dailyTotals);
+            $totals = array_values($dailyTotals);
+            $lastDate = $dates[count($dates) - 1] ?? null;
+            $last = $totals[count($totals) - 1] ?? 0;
+            $prev7 = array_slice($totals, -8, 7);
+            $avg7 = count($prev7) > 0 ? array_sum($prev7) / count($prev7) : 0;
+
+            if ($lastDate && $avg7 > 0 && $last < ($avg7 * 0.8)) {
+                $dropPct = round((1 - ($last / $avg7)) * 100, 2);
+                $throttleKey = 'notif_revenue_drop_'.$lastDate;
+                if (! Cache::has($throttleKey)) {
+                    $this->notificationService->notifyRevenueDrop($dropPct);
+                    Cache::put($throttleKey, true, now()->addHours(12));
+                }
+            }
+        }
+
         return response()->json($data);
     }
 
@@ -133,9 +162,11 @@ class DashboardController extends Controller
         $includeData = in_array(strtolower((string) $request->query('include_data', '0')), ['1', 'true', 'yes'], true);
         $months = max(1, min((int) $request->query('months', 12), 36));
 
-        $cacheKey = "dashboard_revenus_monthly_" . ($includeData ? 'with_data' : 'no_data') . "_{$months}";
+        $cacheKey = 'dashboard_revenus_monthly_'.($includeData ? 'with_data' : 'no_data')."_{$months}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
-        if ($bypassCache) Cache::forget($cacheKey);
+        if ($bypassCache) {
+            Cache::forget($cacheKey);
+        }
 
         $data = Cache::remember($cacheKey, 600, function () use ($months, $includeData, $allowedCallTypes) {
             $q = DB::table('ra_t_occ_cdr_detail');
@@ -143,11 +174,10 @@ class DashboardController extends Controller
                 $q->whereIn('call_type', $allowedCallTypes);
             }
 
-            // SQLite strftime; works on pg too with to_char if adapted later.
             return $q
-                ->selectRaw("strftime('%Y-%m', start_date) as month, SUM(charge_amount) as total, COUNT(*) as nb_cdr")
+                ->selectRaw("TO_CHAR(start_date, 'YYYY-MM') as month, SUM(charge_amount) as total, COUNT(*) as nb_cdr")
                 ->where('start_date', '>=', now()->subMonths($months)->startOfMonth()->toDateString())
-                ->groupBy('month')
+                ->groupBy(DB::raw("TO_CHAR(start_date, 'YYYY-MM')"))
                 ->orderBy('month')
                 ->get();
         });
@@ -162,9 +192,11 @@ class DashboardController extends Controller
         $days = max(1, min((int) $request->query('days', 30), 365));
         $topN = max(1, min((int) $request->query('topN', 50), 200));
 
-        $cacheKey = "dashboard_revenus_fournisseur_" . ($includeData ? 'with_data' : 'no_data') . "_{$days}_{$topN}";
+        $cacheKey = 'dashboard_revenus_fournisseur_'.($includeData ? 'with_data' : 'no_data')."_{$days}_{$topN}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
-        if ($bypassCache) Cache::forget($cacheKey);
+        if ($bypassCache) {
+            Cache::forget($cacheKey);
+        }
 
         $data = Cache::remember($cacheKey, 600, function () use ($includeData, $allowedCallTypes, $days, $topN) {
             $q = DB::table('ra_t_occ_cdr_detail as o')
@@ -193,9 +225,11 @@ class DashboardController extends Controller
         $days = max(1, min((int) $request->query('days', 30), 365));
         $topN = max(1, min((int) $request->query('topN', 20), 100));
 
-        $cacheKey = "dashboard_top_services_" . ($includeData ? 'with_data' : 'no_data') . "_{$days}_{$topN}";
+        $cacheKey = 'dashboard_top_services_'.($includeData ? 'with_data' : 'no_data')."_{$days}_{$topN}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
-        if ($bypassCache) Cache::forget($cacheKey);
+        if ($bypassCache) {
+            Cache::forget($cacheKey);
+        }
 
         $data = Cache::remember($cacheKey, 600, function () use ($includeData, $allowedCallTypes, $days, $topN) {
             $q = DB::table('ra_t_occ_cdr_detail as o')
@@ -227,7 +261,7 @@ class DashboardController extends Controller
         $includeData = in_array(strtolower((string) $request->query('include_data', '0')), ['1', 'true', 'yes'], true);
         $days = max(1, min((int) $request->query('days', 14), 90));
 
-        $cacheKey = 'dashboard_mmg_vs_occ_' . ($includeData ? 'with_data' : 'no_data') . "_{$days}";
+        $cacheKey = 'dashboard_mmg_vs_occ_'.($includeData ? 'with_data' : 'no_data')."_{$days}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
         if ($bypassCache) {
             Cache::forget($cacheKey);
@@ -243,7 +277,7 @@ class DashboardController extends Controller
                 return [];
             }
             $anchorDate = (string) $anchorDate;
-            $fromDate = date('Y-m-d', strtotime($anchorDate . " -{$days} days"));
+            $fromDate = date('Y-m-d', strtotime($anchorDate." -{$days} days"));
 
             $occQ = DB::table('ra_t_occ_cdr_detail')
                 ->where('start_date', '>=', $fromDate)
@@ -277,11 +311,28 @@ class DashboardController extends Controller
                     'occ' => $occMap[$cursor] ?? 0,
                     'mmg' => $mmgMap[$cursor] ?? 0,
                 ];
-                $cursor = date('Y-m-d', strtotime($cursor . ' +1 day'));
+                $cursor = date('Y-m-d', strtotime($cursor.' +1 day'));
             }
 
             return $out;
         });
+
+        if (count($series) > 0) {
+            $last = $series[count($series) - 1];
+            $occ = (int) ($last['occ'] ?? 0);
+            $mmg = (int) ($last['mmg'] ?? 0);
+            $date = (string) ($last['date'] ?? '');
+            if ($date !== '' && $occ > 0) {
+                $ecartPct = round(abs($mmg - $occ) / $occ * 100, 2);
+                if ($ecartPct > 5) {
+                    $throttleKey = 'notif_anomaly_'.$date;
+                    if (! Cache::has($throttleKey)) {
+                        $this->notificationService->notifyAnomaly($ecartPct, $date);
+                        Cache::put($throttleKey, true, now()->addHours(12));
+                    }
+                }
+            }
+        }
 
         return response()->json($series);
     }

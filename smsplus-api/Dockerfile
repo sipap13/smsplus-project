@@ -17,7 +17,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY . /app
-RUN composer install --no-dev --no-interaction --prefer-dist --no-progress
+RUN composer install --no-dev --no-interaction --prefer-dist --no-progress \
+  && rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
 
 EXPOSE 8000
 

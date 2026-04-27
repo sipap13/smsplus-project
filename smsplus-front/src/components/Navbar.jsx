@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from 'react';
+import NotificationBell from './NotificationBell';
 
 const PAGES = [
   { id: 'dashboard', label: 'Vue Ops Overview', path: '/dashboard', hint: 'Navigation' },
@@ -8,8 +9,8 @@ const PAGES = [
   { id: 'cdr-mmg', label: 'CDR MMG', path: '/cdr/mmg', hint: 'Navigation' },
   { id: 'msisdn', label: 'Recherche MSISDN', path: '/msisdn', hint: 'Navigation' },
   { id: 'services', label: 'Services VAS', path: '/services', hint: 'Navigation' },
+  { id: 'notifications', label: 'Notifications', path: '/notifications', hint: 'Navigation' },
   { id: 'users', label: 'Utilisateurs', path: '/users', hint: 'Navigation' },
-  { id: 'sos', label: 'SOS Solde & Data', path: '/sos', hint: 'Navigation' },
 ];
 
 function Icon({ name }) {
@@ -22,7 +23,7 @@ function Icon({ name }) {
   return <svg {...common}><circle cx="12" cy="12" r="8" /></svg>;
 }
 
-export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'light', onToggleTheme, onNavigate }) {
+export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'light', onToggleTheme, onNavigate, unreadCount = 0, setUnreadCount, setSidebarUnread }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
 
@@ -73,6 +74,12 @@ export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'lig
           >
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
           </button>
+
+          <NotificationBell
+            unreadCount={unreadCount}
+            setUnreadCount={setUnreadCount}
+            setSidebarUnread={setSidebarUnread}
+          />
 
           <div className="nav-user">
             <span className="nav-user-icon"><Icon name="user" /></span>

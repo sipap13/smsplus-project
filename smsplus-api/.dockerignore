@@ -1,0 +1,23 @@
+# Node modules (si présents)
+node_modules/
+
+# Storage sauf imports
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+storage/app/
+
+# Dev / tests
+.git/
+.github/
+tests/
+docs/
+
+# Bootstrap cache (régénéré au démarrage)
+bootstrap/cache/*.php
+
+# Env local
+.env
+.env.*
+!.env.example

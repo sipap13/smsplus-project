@@ -14,7 +14,6 @@ class DatabaseSeeder extends Seeder
             RaTOccCdrSeeder::class,
             RaTPfeCdrSeeder::class,
             RaTReclamationsSeeder::class,
-            RaTSosSeeder::class,
         ]);
     }
 }

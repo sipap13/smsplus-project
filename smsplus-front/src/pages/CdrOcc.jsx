@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
+import { downloadExcel } from '../api/excelDownload';
 import { formatDT } from '../lib/format';
 
 const PER_PAGE = 50;
@@ -28,6 +29,9 @@ export default function CdrOcc() {
     subscriber_type: '',
     partner: '',
   });
+
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const loadOptions = useCallback(() => {
     api
@@ -99,6 +103,25 @@ export default function CdrOcc() {
     setCurrentPage(p);
   };
 
+  const handleExport = async () => {
+    await downloadExcel(
+      '/export/occ',
+      applied,
+      `CDR_OCC_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      () => {
+        setExportLoading(true);
+        setExportError('');
+      },
+      (err) => {
+        setExportError(err || 'Erreur lors de l\'export');
+        setExportLoading(false);
+      },
+      () => {
+        setExportLoading(false);
+      }
+    );
+  };
+
   const cols = [
     { key: 'a_msisdn', label: 'A MSISDN' },
     { key: 'b_msisdn', label: 'B MSISDN' },
@@ -167,11 +190,59 @@ export default function CdrOcc() {
         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
           Page {currentPage}{lastPage ? ` / ${lastPage}` : ''}
         </div>
+        <div style={{ marginLeft: 'auto' }}>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportLoading || total === 0}
+            className="btn"
+            style={{
+              background: exportLoading ? '#9ca3af' : '#16a34a',
+              color: 'white',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: '600',
+              border: 'none',
+              cursor: exportLoading || total === 0 ? 'not-allowed' : 'pointer',
+              opacity: exportLoading || total === 0 ? 0.7 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              if (!exportLoading && total > 0) e.target.style.background = '#15803d';
+            }}
+            onMouseLeave={(e) => {
+              if (!exportLoading && total > 0) e.target.style.background = '#16a34a';
+            }}
+          >
+            {exportLoading ? (
+              <>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                Export en cours...
+              </>
+            ) : (
+              <>
+                <span>⬇</span>
+                Exporter Excel
+              </>
+            )}
+          </button>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem', textAlign: 'center' }}>Max 10 000 lignes</span>
+        </div>
       </div>
 
       {error && (
         <div style={{ padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(198, 40, 40, 0.1)', border: '1px solid rgba(198, 40, 40, 0.35)', color: 'var(--text-main)' }}>
           {error}
+        </div>
+      )}
+
+      {exportError && (
+        <div style={{ padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(198, 40, 40, 0.1)', border: '1px solid rgba(198, 40, 40, 0.35)', color: 'var(--text-main)' }}>
+          Erreur export : {exportError}
         </div>
       )}
 

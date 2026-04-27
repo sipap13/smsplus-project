@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
+import { downloadExcel } from '../api/excelDownload';
 import Modal from '../components/Modal';
 
 const TYPE_OPTIONS = ['Service', 'jeu'];
@@ -23,6 +24,8 @@ export default function Services() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -105,6 +108,25 @@ export default function Services() {
 
   const bannerOk = !/erreur|invalide/i.test(msg);
 
+  const handleExport = async () => {
+    await downloadExcel(
+      '/export/services',
+      {},
+      `Services_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      () => {
+        setExportLoading(true);
+        setExportError('');
+      },
+      (err) => {
+        setExportError(err || 'Erreur lors de l\'export');
+        setExportLoading(false);
+      },
+      () => {
+        setExportLoading(false);
+      }
+    );
+  };
+
   return (
     <div className="page">
       <div className="page-header">
@@ -112,9 +134,49 @@ export default function Services() {
           <h1 className="page-title">Gestion des services</h1>
           <p className="page-subtitle">{services.length} service(s) au total — réservé aux administrateurs</p>
         </div>
-        <button type="button" onClick={openNew} className="btn btn-primary">
-          Ajouter un service
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportLoading || services.length === 0}
+            style={{
+              background: exportLoading ? '#9ca3af' : '#16a34a',
+              color: 'white',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: '600',
+              border: 'none',
+              cursor: exportLoading || services.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: exportLoading || services.length === 0 ? 0.7 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              if (!exportLoading && services.length > 0) e.target.style.background = '#15803d';
+            }}
+            onMouseLeave={(e) => {
+              if (!exportLoading && services.length > 0) e.target.style.background = '#16a34a';
+            }}
+          >
+            {exportLoading ? (
+              <>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                En cours...
+              </>
+            ) : (
+              <>
+                <span>⬇</span>
+                Excel
+              </>
+            )}
+          </button>
+          <button type="button" onClick={openNew} className="btn btn-primary">
+            Ajouter un service
+          </button>
+        </div>
       </div>
 
       {msg && (
@@ -143,6 +205,20 @@ export default function Services() {
           }}
         >
           {error}
+        </div>
+      )}
+      {exportError && (
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            background: 'rgba(198, 40, 40, 0.1)',
+            color: 'var(--text-main)',
+            border: '1px solid rgba(198, 40, 40, 0.35)',
+          }}
+        >
+          Erreur export : {exportError}
         </div>
       )}
 

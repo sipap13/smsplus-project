@@ -262,6 +262,196 @@ class CdrController extends Controller
         ]);
     }
 
+    public function timeline(string $msisdn, Request $request)
+    {
+        $norm = $this->normalizeMsisdn($msisdn);
+        if (strlen($norm) < 5 || strlen($norm) > 32) {
+            return response()->json(['message' => 'MSISDN invalide'], 422);
+        }
+
+        $dateFin   = $request->query('date_fin')   ? \Carbon\Carbon::parse($request->query('date_fin'))->format('Y-m-d') : now()->format('Y-m-d');
+        $dateDebut = $request->query('date_debut') ? \Carbon\Carbon::parse($request->query('date_debut'))->format('Y-m-d') : now()->subDays(30)->format('Y-m-d');
+        $source    = in_array($request->query('source'), ['occ', 'mmg', 'all']) ? $request->query('source') : 'all';
+
+        $services = DB::table('ra_t_services')
+            ->whereNotNull('keyword')
+            ->where('keyword', '!=', '')
+            ->pluck('nom_service', 'keyword')
+            ->toArray();
+
+        $items = [];
+
+        if ($source === 'occ' || $source === 'all') {
+            $occRows = DB::table('ra_t_occ_cdr_detail')
+                ->where('a_msisdn', $norm)
+                ->whereBetween('start_date', [$dateDebut, $dateFin])
+                ->orderByDesc('start_date')
+                ->orderByDesc('start_hour')
+                ->limit(200)
+                ->get([
+                    'id',
+                    'start_date',
+                    'start_hour',
+                    'orig_start_time',
+                    'b_msisdn',
+                    'keyword',
+                    'charge_amount',
+                    'event_type',
+                    'subscriber_type',
+                    'call_type',
+                ]);
+
+            foreach ($occRows as $row) {
+                $dt = $this->buildDatetime($row->start_date, $row->start_hour, $row->orig_start_time);
+                $items[] = [
+                    'id'              => (int) $row->id,
+                    'source'          => 'OCC',
+                    'date'            => $row->start_date,
+                    'heure'           => (int) $row->start_hour,
+                    'datetime'        => $dt,
+                    'service'         => $row->keyword,
+                    'nom_service'     => $services[$row->keyword] ?? strtoupper($row->keyword ?? ''),
+                    'montant'         => (float) $row->charge_amount,
+                    'destinataire'    => $row->b_msisdn,
+                    'statut'          => 'Success',
+                    'type'            => $row->event_type ?? $row->call_type ?? 'VAS',
+                    'subscriber_type' => $row->subscriber_type,
+                    'raw'             => $row,
+                ];
+            }
+        }
+
+        if ($source === 'mmg' || $source === 'all') {
+            $mmgRows = DB::table('ra_t_mmg_cdr_det')
+                ->where('a_msisdn', $norm)
+                ->whereBetween('start_date', [$dateDebut, $dateFin])
+                ->orderByDesc('start_date')
+                ->orderByDesc('start_hour')
+                ->limit(200)
+                ->get([
+                    'id',
+                    'start_date',
+                    'start_hour',
+                    'orig_start_time',
+                    'b_msisdn',
+                    'service_type',
+                    'event_type',
+                    'subscriber_type',
+                    'event_status',
+                    'call_type',
+                ]);
+
+            foreach ($mmgRows as $row) {
+                $dt = $this->buildDatetime($row->start_date, $row->start_hour, $row->orig_start_time);
+                $items[] = [
+                    'id'              => (int) $row->id,
+                    'source'          => 'MMG',
+                    'date'            => $row->start_date,
+                    'heure'           => (int) $row->start_hour,
+                    'datetime'        => $dt,
+                    'service'         => $row->service_type,
+                    'nom_service'     => $services[$row->service_type] ?? strtoupper($row->service_type ?? ''),
+                    'montant'         => 0.00,
+                    'destinataire'    => $row->b_msisdn,
+                    'statut'          => $row->event_status ?? '—',
+                    'type'            => $row->event_type ?? $row->call_type ?? 'SMS',
+                    'subscriber_type' => $row->subscriber_type,
+                    'raw'             => $row,
+                ];
+            }
+        }
+
+        usort($items, function ($a, $b) {
+            return strcmp($b['datetime'], $a['datetime']);
+        });
+
+        $items = $this->markDuplicates($items);
+
+        $parJour = [];
+        $servicesUtilises = [];
+        $totalRevenus = 0;
+        $datesUniques = [];
+
+        foreach ($items as $it) {
+            $d = $it['date'];
+            if (!isset($parJour[$d])) {
+                $parJour[$d] = ['date' => $d, 'nb_transactions' => 0, 'montant_total' => 0.0, 'sources' => []];
+            }
+            $parJour[$d]['nb_transactions']++;
+            $parJour[$d]['montant_total'] += $it['montant'];
+            $parJour[$d]['sources'][] = $it['source'];
+            $parJour[$d]['sources'] = array_values(array_unique($parJour[$d]['sources']));
+
+            $totalRevenus += $it['montant'];
+
+            if ($it['service'] && !in_array($it['service'], $servicesUtilises)) {
+                $servicesUtilises[] = $it['service'];
+            }
+
+            $datesUniques[$d] = true;
+        }
+
+        $parJour = array_values($parJour);
+        usort($parJour, fn ($a, $b) => strcmp($b['date'], $a['date']));
+
+        $sortedDates = array_keys($datesUniques);
+        sort($sortedDates);
+        $premierContact = $sortedDates[0] ?? null;
+        $dernierContact = $sortedDates[count($sortedDates) - 1] ?? null;
+
+        $gaps = [];
+        for ($i = 1; $i < count($sortedDates); $i++) {
+            $diff = (new \Carbon\Carbon($sortedDates[$i]))->diffInDays(new \Carbon\Carbon($sortedDates[$i - 1]));
+            if ($diff > 3) {
+                $gaps[] = [
+                    'apres'  => $sortedDates[$i - 1],
+                    'avant'  => $sortedDates[$i],
+                    'jours'  => $diff - 1,
+                ];
+            }
+        }
+
+        return response()->json([
+            'msisdn'            => $norm,
+            'periode'           => ['debut' => $dateDebut, 'fin' => $dateFin],
+            'total_transactions'=> count($items),
+            'total_revenus'     => round($totalRevenus, 3),
+            'timeline'          => $items,
+            'par_jour'          => $parJour,
+            'services_utilises' => $servicesUtilises,
+            'premier_contact'   => $premierContact,
+            'dernier_contact'   => $dernierContact,
+            'gaps'              => $gaps,
+        ]);
+    }
+
+    private function buildDatetime(string $date, ?int $hour, ?string $orig): string
+    {
+        if ($orig && preg_match('/(\d{4})[-\/](\d{2})[-\/](\d{2}).*(\d{2}):(\d{2}):(\d{2})/', $orig, $m)) {
+            return "{$m[1]}-{$m[2]}-{$m[3]}T{$m[4]}:{$m[5]}:{$m[6]}";
+        }
+        $h = str_pad((string) ($hour ?? 0), 2, '0', STR_PAD_LEFT);
+        return "{$date}T{$h}:00:00";
+    }
+
+    private function markDuplicates(array $items): array
+    {
+        $seen = [];
+        foreach ($items as $i => $it) {
+            $key = implode('|', [
+                $it['date'],
+                $it['heure'],
+                $it['source'],
+                $it['service'] ?? '',
+                $it['montant'],
+                $it['destinataire'] ?? '',
+            ]);
+            $items[$i]['doublon'] = isset($seen[$key]);
+            $seen[$key] = true;
+        }
+        return $items;
+    }
+
     private function normalizeMsisdn(string $raw): string
     {
         $s = preg_replace('/\s+/', '', $raw) ?? '';

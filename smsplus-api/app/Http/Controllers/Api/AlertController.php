@@ -3,11 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AlertController extends Controller
 {
+    public function __construct(
+        protected NotificationService $notificationService
+    ) {}
+
     public function index()
     {
         $alerts = DB::table('ra_t_alerts')->orderBy('start_date', 'desc')->orderBy('id', 'desc')->get();
@@ -18,29 +24,41 @@ class AlertController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'start_date'      => 'required|date',
-            'nom_service'     => 'nullable|string|max:100',
-            'numero_court'    => 'nullable|string|max:20',
-            'keyword'         => 'nullable|string|max:20',
+            'start_date' => 'required|date',
+            'nom_service' => 'nullable|string|max:100',
+            'numero_court' => 'nullable|string|max:20',
+            'keyword' => 'nullable|string|max:20',
             'nom_fournisseur' => 'nullable|string|max:100',
-            'seuil_pct'       => 'nullable|numeric|min:0|max:100',
-            'count_nb_sms'    => 'nullable|integer|min:0',
-            'motif'           => 'nullable|string|max:255',
+            'seuil_pct' => 'nullable|numeric|min:0|max:100',
+            'count_nb_sms' => 'nullable|integer|min:0',
+            'motif' => 'nullable|string|max:255',
         ]);
 
         $id = DB::table('ra_t_alerts')->insertGetId([
-            'start_date'      => $validated['start_date'],
-            'nom_service'     => $validated['nom_service'] ?? null,
-            'numero_court'    => $validated['numero_court'] ?? null,
-            'keyword'         => $validated['keyword'] ?? null,
+            'start_date' => $validated['start_date'],
+            'nom_service' => $validated['nom_service'] ?? null,
+            'numero_court' => $validated['numero_court'] ?? null,
+            'keyword' => $validated['keyword'] ?? null,
             'nom_fournisseur' => $validated['nom_fournisseur'] ?? null,
-            'seuil_pct'       => $validated['seuil_pct'] ?? null,
-            'count_nb_sms'    => $validated['count_nb_sms'] ?? null,
-            'motif'           => $validated['motif'] ?? null,
-            'status'          => false,
-            'created_at'      => now(),
-            'updated_at'      => now(),
+            'seuil_pct' => $validated['seuil_pct'] ?? null,
+            'count_nb_sms' => $validated['count_nb_sms'] ?? null,
+            'motif' => $validated['motif'] ?? null,
+            'status' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
+
+        try {
+            $this->notificationService->notifyFraudAlert(
+                (string) ($validated['keyword'] ?? 'N/A'),
+                (string) ($validated['motif'] ?? 'Alerte fraude detectee')
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('Fraud notification dispatch failed after alert create', [
+                'alert_id' => $id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
 
         return response()->json(DB::table('ra_t_alerts')->find($id), 201);
     }
@@ -56,15 +74,15 @@ class AlertController extends Controller
         }
 
         $validated = $request->validate([
-            'status'          => 'sometimes|boolean',
-            'start_date'      => 'sometimes|date',
-            'nom_service'     => 'nullable|string|max:100',
-            'numero_court'    => 'nullable|string|max:20',
-            'keyword'         => 'nullable|string|max:20',
+            'status' => 'sometimes|boolean',
+            'start_date' => 'sometimes|date',
+            'nom_service' => 'nullable|string|max:100',
+            'numero_court' => 'nullable|string|max:20',
+            'keyword' => 'nullable|string|max:20',
             'nom_fournisseur' => 'nullable|string|max:100',
-            'seuil_pct'       => 'nullable|numeric|min:0|max:100',
-            'count_nb_sms'    => 'nullable|integer|min:0',
-            'motif'           => 'nullable|string|max:255',
+            'seuil_pct' => 'nullable|numeric|min:0|max:100',
+            'count_nb_sms' => 'nullable|integer|min:0',
+            'motif' => 'nullable|string|max:255',
         ]);
 
         $payload = ['updated_at' => now()];

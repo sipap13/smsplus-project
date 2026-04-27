@@ -199,7 +199,7 @@ export default function Dashboard({ user }) {
           <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>Aucune donnée MMG/OCC sur cette période</p>
         ) : (
           <div style={{ width: '100%', minHeight: 300 }}>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={0}>
               <BarChart data={mmgVsOcc} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} interval={0} angle={-35} textAnchor="end" height={56} />
@@ -226,7 +226,7 @@ export default function Dashboard({ user }) {
             <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem 0' }}>Aucune donnée disponible</p>
           ) : (
             <div style={{ width: '100%', minHeight: 260 }}>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={240} minWidth={0} minHeight={0}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
@@ -273,7 +273,7 @@ export default function Dashboard({ user }) {
         <div className="saas-surface" style={{ borderRadius: '10px', padding: '1.2rem' }}>
           <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem', fontWeight: 700 }}>{serviceChartTitle}</h3>
           <div style={{ width: '100%', minHeight: 240 }}>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
             <BarChart data={serviceChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />

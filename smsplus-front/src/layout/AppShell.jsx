@@ -8,17 +8,20 @@ import { applyTheme } from '../theme';
 const pageTitles = {
   '/': 'Tableau de bord',
   '/dashboard': 'Tableau de bord',
-  '/sos': 'SOS Solde & Data',
   '/services': 'Services VAS',
   '/msisdn': 'Recherche MSISDN',
   '/cdr/occ': 'CDR OCC',
   '/cdr/mmg': 'CDR MMG',
   '/revenus': 'Revenus détaillés',
   '/alerts': 'Alertes fraude',
+  '/predictions': 'Prédictions IA',
+  '/notifications': 'Notifications',
+  '/imports': 'Import de Données',
   '/users': 'Utilisateurs',
+  '/etl-monitor': 'ETL Monitor',
 };
 
-export default function AppShell({ user, onLogout }) {
+export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCount, setSidebarUnread }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState(() => {
@@ -40,14 +43,17 @@ export default function AppShell({ user, onLogout }) {
   const activePage = (() => {
     const p = location.pathname;
     if (p === '/' || p === '/dashboard') return 'dashboard';
-    if (p.startsWith('/sos')) return 'sos';
     if (p.startsWith('/services')) return 'services';
     if (p.startsWith('/msisdn')) return 'msisdn';
     if (p.startsWith('/cdr/occ')) return 'cdr-occ';
     if (p.startsWith('/cdr/mmg')) return 'cdr-mmg';
     if (p.startsWith('/revenus')) return 'revenus';
     if (p.startsWith('/alerts')) return 'alerts';
+    if (p.startsWith('/predictions')) return 'predictions';
+    if (p.startsWith('/notifications')) return 'notifications';
+    if (p.startsWith('/imports')) return 'imports';
     if (p.startsWith('/users')) return 'users';
+    if (p.startsWith('/etl-monitor')) return 'etl-monitor';
     return 'dashboard';
   })();
 
@@ -60,17 +66,21 @@ export default function AppShell({ user, onLogout }) {
         <Sidebar
           user={user}
           activePage={activePage}
+          unreadCount={unreadCount}
           onNavigate={(id) => {
             const map = {
               dashboard: '/dashboard',
-              sos: '/sos',
               services: '/services',
               msisdn: '/msisdn',
               'cdr-occ': '/cdr/occ',
               'cdr-mmg': '/cdr/mmg',
               revenus: '/revenus',
               alerts: '/alerts',
+              predictions: '/predictions',
+              notifications: '/notifications',
+              imports: '/imports',
               users: '/users',
+              'etl-monitor': '/etl-monitor',
             };
             navigate(map[id] || '/dashboard');
           }}
@@ -85,6 +95,9 @@ export default function AppShell({ user, onLogout }) {
               theme={theme}
               onToggleTheme={toggleTheme}
               onNavigate={(path) => navigate(path)}
+              unreadCount={unreadCount}
+              setUnreadCount={setUnreadCount}
+              setSidebarUnread={setSidebarUnread}
             />
             <Outlet />
           </div>
