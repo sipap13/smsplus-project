@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import Modal from '../components/Modal';
@@ -26,6 +27,8 @@ export default function Services() {
   const [msg, setMsg] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [filtreAlerte, setFiltreAlerte] = useState('tous');
+  const navigate = useNavigate();
 
   const load = () => {
     setLoading(true);
@@ -127,12 +130,21 @@ export default function Services() {
     );
   };
 
+  const servicesFiltres = services.filter((s) => {
+    if (filtreAlerte === 'avec_alertes') return (s.nb_alertes_ouvertes || 0) > 0;
+    if (filtreAlerte === 'sans_alertes') return (s.nb_alertes_ouvertes || 0) === 0;
+    return true;
+  });
+
+  const totalSmsSuspectsGlobal = services.reduce((sum, s) => sum + Number(s.total_sms_suspects || 0), 0);
+  const servicesAvecAlertes = services.filter((s) => (s.nb_alertes_ouvertes || 0) > 0);
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Gestion des services</h1>
-          <p className="page-subtitle">{services.length} service(s) au total — réservé aux administrateurs</p>
+          <p className="page-subtitle">{services.length} service(s) au total — {servicesAvecAlertes.length} avec alertes actives</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
@@ -140,43 +152,90 @@ export default function Services() {
             onClick={handleExport}
             disabled={exportLoading || services.length === 0}
             style={{
-              background: exportLoading ? '#9ca3af' : '#16a34a',
+              background: exportLoading ? 'var(--text-muted)' : 'var(--success)',
               color: 'white',
               borderRadius: '8px',
               padding: '8px 16px',
               fontSize: '14px',
               fontWeight: '600',
               border: 'none',
-              cursor: exportLoading || services.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: exportLoading || services.length === 0 ? 0.7 : 1,
+              cursor: (exportLoading || services.length === 0) ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (!exportLoading && services.length > 0) e.target.style.background = '#15803d';
-            }}
-            onMouseLeave={(e) => {
-              if (!exportLoading && services.length > 0) e.target.style.background = '#16a34a';
+              gap: '6px'
             }}
           >
-            {exportLoading ? (
-              <>
-                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-                En cours...
-              </>
-            ) : (
-              <>
-                <span>⬇</span>
-                Excel
-              </>
-            )}
+            {exportLoading ? '...' : 'Excel'}
           </button>
           <button type="button" onClick={openNew} className="btn btn-primary">
             Ajouter un service
           </button>
         </div>
+      </div>
+
+      {servicesAvecAlertes.length > 0 && (
+        <div style={{
+          background: 'var(--primary-soft)',
+          border: '1px solid var(--border)',
+          borderRadius: '8px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>⚠</span>
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--warning)', fontSize: '15px' }}>
+                {servicesAvecAlertes.length} service(s) avec alertes actives
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                Total : {totalSmsSuspectsGlobal.toLocaleString('fr-FR')} SMS suspects détectés sur les 30 derniers jours
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/alerts')}
+            style={{
+              background: 'var(--warning)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)',
+            }}
+          >
+            Gérer les alertes →
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+         <button 
+           onClick={() => setFiltreAlerte('tous')}
+           className={`btn ${filtreAlerte === 'tous' ? 'btn-primary' : 'btn-ghost'}`}
+           style={{ fontSize: '13px', padding: '6px 14px' }}
+         >
+           Tous ({services.length})
+         </button>
+         <button 
+           onClick={() => setFiltreAlerte('avec_alertes')}
+           className={`btn ${filtreAlerte === 'avec_alertes' ? 'btn-primary' : 'btn-ghost'}`}
+           style={{ fontSize: '13px', padding: '6px 14px', color: filtreAlerte === 'avec_alertes' ? 'white' : 'var(--danger)' }}
+         >
+           ⚠ Avec alertes ({servicesAvecAlertes.length})
+         </button>
+         <button 
+           onClick={() => setFiltreAlerte('sans_alertes')}
+           className={`btn ${filtreAlerte === 'sans_alertes' ? 'btn-primary' : 'btn-ghost'}`}
+           style={{ fontSize: '13px', padding: '6px 14px', color: filtreAlerte === 'sans_alertes' ? 'white' : 'var(--success)' }}
+         >
+           ✓ Sans alertes ({services.length - servicesAvecAlertes.length})
+         </button>
       </div>
 
       {msg && (
@@ -307,7 +366,7 @@ export default function Services() {
           <table className="table-mobile table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['ID', 'Fournisseur', 'Service', 'N° court', 'Keyword', 'Type', 'Prix (DT)', 'Actif', 'Actions'].map((h) => (
+                {['Service', 'Fournisseur', 'Keyword', 'Prix', 'Activité 30j', 'Alertes', 'Statut', 'Actions'].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -326,54 +385,99 @@ export default function Services() {
               </tr>
             </thead>
             <tbody>
-              {services.map((s) => {
+              {servicesFiltres.map((s) => {
                 const prixNum = parseFloat(s.prix, 10);
                 const prixLabel = Number.isFinite(prixNum) ? prixNum.toFixed(3) : '—';
+                const hasAlerts = (s.nb_alertes_ouvertes || 0) > 0;
+
                 return (
-                  <tr key={s.id}>
-                    <td data-label="ID" className="mono" style={{ padding: '0.875rem 1rem', color: 'var(--text-muted)' }}>
-                      {s.id}
+                  <tr key={s.id} style={{ background: hasAlerts ? 'rgba(254, 242, 242, 0.3)' : 'transparent' }}>
+                    <td data-label="Service" style={{ padding: '0.875rem 1rem' }}>
+                       <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{s.nom_service}</div>
+                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{s.type_service} · {s.numero_court}</div>
                     </td>
-                    <td data-label="Fournisseur" style={{ padding: '0.875rem 1rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    <td data-label="Fournisseur" style={{ padding: '0.875rem 1rem', color: 'var(--text-main)' }}>
                       {s.nom_fournisseur}
-                    </td>
-                    <td data-label="Service" style={{ padding: '0.875rem 1rem', color: 'var(--text-main)' }}>
-                      {s.nom_service}
-                    </td>
-                    <td data-label="N° court" className="text-heading mono" style={{ padding: '0.875rem 1rem', fontWeight: 600 }}>
-                      {s.numero_court}
                     </td>
                     <td data-label="Keyword" style={{ padding: '0.875rem 1rem' }}>
                       <span className="chip">{s.keyword}</span>
                     </td>
-                    <td data-label="Type" style={{ padding: '0.875rem 1rem' }}>
-                      <span
-                        style={{
-                          background: s.type_service === 'jeu' ? 'rgba(230, 81, 0, 0.15)' : 'rgba(2, 136, 209, 0.15)',
-                          color: s.type_service === 'jeu' ? '#e65100' : '#0288d1',
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '20px',
-                          fontSize: '0.82rem',
-                        }}
-                      >
-                        {s.type_service || '—'}
-                      </span>
-                    </td>
                     <td data-label="Prix" style={{ padding: '0.875rem 1rem', fontWeight: 600, color: 'var(--success)' }}>
-                      {prixLabel}
+                      {prixLabel} DT
                     </td>
-                    <td data-label="Actif" style={{ padding: '0.875rem 1rem' }}>
+                    <td data-label="Activité 30j" style={{ padding: '0.875rem 1rem' }}>
+                      {s.nb_cdr_30j > 0 ? (
+                        <>
+                          <div style={{ fontWeight: 600, fontSize: '13px' }}>{Number(s.nb_cdr_30j).toLocaleString('fr-FR')} CDR</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {Number(s.revenus_30j).toFixed(3)} DT · {s.nb_abonnes_30j} abonnés
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>Inactif</span>
+                      )}
+                    </td>
+                    <td data-label="Alertes" style={{ padding: '0.875rem 1rem', minWidth: '220px' }}>
+                      {hasAlerts ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: s.urgence_alerte === 'critique' ? 'rgba(220, 38, 38, 0.15)' : s.urgence_alerte === 'haute' ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-surface)',
+                            color: s.urgence_alerte === 'critique' ? 'var(--danger)' : s.urgence_alerte === 'haute' ? 'var(--warning)' : 'var(--text-muted)',
+                            border: '1px solid',
+                            borderColor: s.urgence_alerte === 'critique' ? '#fecaca' : s.urgence_alerte === 'haute' ? '#fde68a' : '#fed7aa',
+                            borderRadius: '999px',
+                            padding: '2px 10px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            width: 'fit-content',
+                          }}>
+                            ⚠ {s.nb_alertes_ouvertes} alerte{s.nb_alertes_ouvertes > 1 ? 's' : ''} · {s.urgence_alerte.toUpperCase()}
+                          </span>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            {Number(s.total_sms_suspects).toLocaleString('fr-FR')} SMS suspects
+                            {s.ratio_suspects_pct > 0 && (
+                              <span style={{ color: '#dc2626', fontWeight: 600 }}> ({s.ratio_suspects_pct}%)</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#94a3b8' }}>Seuil max : {s.seuil_max}%</div>
+                          <div style={{ fontSize: '10px', color: '#94a3b8' }}>Depuis : {new Date(s.derniere_alerte).toLocaleDateString('fr-FR')}</div>
+                          <button
+                            onClick={() => navigate(`/alerts?keyword=${s.keyword}`)}
+                            style={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            padding: '3px 8px',
+                            fontSize: '11px',
+                            color: 'var(--primary)',
+                            cursor: 'pointer',
+                            marginTop: '4px',
+                            width: 'fit-content',
+                            fontWeight: 500
+                            }}
+                          >
+                            Voir les alertes →
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#16a34a', fontSize: '12px', fontWeight: 500 }}>✓ Aucune alerte</span>
+                      )}
+                    </td>
+                    <td data-label="Statut" style={{ padding: '0.875rem 1rem' }}>
                       <span className={`badge ${s.actif ? 'badge-ok' : 'badge-danger'}`}>
                         {s.actif ? 'Actif' : 'Inactif'}
                       </span>
                     </td>
                     <td data-label="Actions" style={{ padding: '0.875rem 1rem' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => openEdit(s)} className="btn btn-soft btn-pill">
-                          Modifier
+                          Détails
                         </button>
-                        <button type="button" onClick={() => del(s.id)} className="btn btn-ghost btn-pill" style={{ borderColor: 'color-mix(in srgb, var(--danger) 40%, var(--border))', color: 'var(--danger)' }}>
-                          Supprimer
+                        <button type="button" onClick={() => del(s.id)} className="btn btn-ghost btn-pill" style={{ color: 'var(--danger)' }}>
+                          ✕
                         </button>
                       </div>
                     </td>

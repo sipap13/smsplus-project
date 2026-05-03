@@ -4,14 +4,31 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Notification;
+use App\Services\EtlMonitorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class NotificationController extends Controller
 {
+    public function __construct(
+        protected EtlMonitorService $monitor,
+    ) {}
     public function index(Request $request): JsonResponse
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'notifications_load',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Notifications', 'triggered_by' => 'user']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for notifications_load', ['error' => $e->getMessage()]);
+        }
+
         try {
             $user = $request->attributes->get('auth_user');
             $userId = (int) ($user->id ?? 0);
@@ -27,6 +44,18 @@ class NotificationController extends Controller
                 ->where('lue', false)
                 ->count();
 
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'success', null, [
+                        'user_id' => $userId,
+                        'nb_notifications' => $notifications->count(),
+                        'nb_non_lues' => $nonLues,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for notifications_load', ['error' => $e->getMessage()]);
+            }
+
             return response()->json([
                 'notifications' => $notifications,
                 'non_lues' => $nonLues,
@@ -34,6 +63,14 @@ class NotificationController extends Controller
             ]);
         } catch (\Throwable $exception) {
             Log::error('Notifications index error', ['message' => $exception->getMessage()]);
+
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Error loading notifications');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for notifications_load', ['error' => $e->getMessage()]);
+            }
 
             return response()->json([
                 'notifications' => [],
@@ -78,6 +115,19 @@ class NotificationController extends Controller
 
     public function lire(Request $request, int $id): JsonResponse
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'notification_mark_read',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Notifications', 'notification_id' => $id]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for notification_mark_read', ['error' => $e->getMessage()]);
+        }
+
         $user = $request->attributes->get('auth_user');
         $userId = (int) ($user->id ?? 0);
 
@@ -87,6 +137,13 @@ class NotificationController extends Controller
             ->first();
 
         if (! $notification) {
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Notification introuvable');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for notification_mark_read', ['error' => $e->getMessage()]);
+            }
             return response()->json(['message' => 'Notification introuvable'], 404);
         }
 
@@ -95,18 +152,58 @@ class NotificationController extends Controller
             'lue_at' => now(),
         ]);
 
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'notification_id' => $id,
+                    'user_id' => $userId,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for notification_mark_read', ['error' => $e->getMessage()]);
+        }
+
         return response()->json(['message' => 'Notification marquee comme lue']);
     }
 
     public function lireTout(Request $request): JsonResponse
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'notifications_mark_all_read',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Notifications']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for notifications_mark_all_read', ['error' => $e->getMessage()]);
+        }
+
         $user = $request->attributes->get('auth_user');
         $userId = (int) ($user->id ?? 0);
+
+        $count = Notification::query()
+            ->where('user_id', $userId)
+            ->where('lue', false)
+            ->count();
 
         Notification::query()
             ->where('user_id', $userId)
             ->where('lue', false)
             ->update(['lue' => true, 'lue_at' => now(), 'updated_at' => now()]);
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'user_id' => $userId,
+                    'nb_marquees_lues' => $count,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for notifications_mark_all_read', ['error' => $e->getMessage()]);
+        }
 
         return response()->json(['message' => 'Toutes les notifications sont marquees comme lues']);
     }

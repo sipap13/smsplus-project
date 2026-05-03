@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\EtlMonitorService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -42,26 +43,46 @@ class EtlCdrFromTmp extends Command
             'occ' => ['processed' => 0, 'inserted' => 0, 'skipped' => 0],
         ];
 
-        if ($source === 'mmg' || $source === 'all') {
-            $this->info('ETL MMG...');
-            $this->etlMmg($chunk, $dryRun, $totals['mmg']);
-        }
+        /** @var EtlMonitorService $monitor */
+        $monitor = app(EtlMonitorService::class);
+        $job = $monitor->startJob('etl_cdr_from_tmp', 'command', ['source' => $source, 'chunk' => $chunk, 'dry_run' => $dryRun]);
 
-        if ($source === 'occ' || $source === 'all') {
-            $this->info('ETL OCC...');
-            $this->etlOcc($chunk, $dryRun, $totals['occ']);
-        }
-
-        $this->newLine();
-        $this->line('Résumé:');
-        foreach (['mmg', 'occ'] as $k) {
-            if ($source !== 'all' && $source !== $k) {
-                continue;
+        try {
+            if ($source === 'mmg' || $source === 'all') {
+                $this->info('ETL MMG...');
+                $this->etlMmg($chunk, $dryRun, $totals['mmg']);
             }
-            $this->line(strtoupper($k) . " processed={$totals[$k]['processed']} inserted={$totals[$k]['inserted']} skipped={$totals[$k]['skipped']}");
-        }
 
-        return self::SUCCESS;
+            if ($source === 'occ' || $source === 'all') {
+                $this->info('ETL OCC...');
+                $this->etlOcc($chunk, $dryRun, $totals['occ']);
+            }
+
+            $this->newLine();
+            $this->line('Résumé:');
+            foreach (['mmg', 'occ'] as $k) {
+                if ($source !== 'all' && $source !== $k) {
+                    continue;
+                }
+                $this->line(strtoupper($k) . " processed={$totals[$k]['processed']} inserted={$totals[$k]['inserted']} skipped={$totals[$k]['skipped']}");
+            }
+
+            $totalProcessed = $totals['mmg']['processed'] + $totals['occ']['processed'];
+            $totalInserted = $totals['mmg']['inserted'] + $totals['occ']['inserted'];
+            $totalSkipped = $totals['mmg']['skipped'] + $totals['occ']['skipped'];
+
+            $monitor->finishJob($job, [
+                'rows_processed' => $totalProcessed,
+                'rows_inserted' => $totalInserted,
+                'rows_skipped' => $totalSkipped,
+            ]);
+
+            return self::SUCCESS;
+        } catch (\Throwable $e) {
+            $monitor->failJob($job, $e->getMessage());
+            $this->error('ETL cdr-from-tmp échoué : ' . $e->getMessage());
+            throw $e;
+        }
     }
 
     private function etlMmg(int $chunk, bool $dryRun, array &$stats): void
@@ -253,7 +274,6 @@ class EtlCdrFromTmp extends Command
         try {
             return Schema::hasTable($table);
         } catch (\Throwable) {
-            // fallback without Schema (if not imported)
             try {
                 DB::table($table)->limit(1)->get();
                 return true;
@@ -263,4 +283,3 @@ class EtlCdrFromTmp extends Command
         }
     }
 }
-

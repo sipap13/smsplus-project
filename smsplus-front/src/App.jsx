@@ -19,6 +19,9 @@ import Predictions from './pages/Predictions';
 import Import from './pages/Import';
 import Landing from './pages/Landing';
 import Notifications from './pages/Notifications';
+import Duplicates from './pages/Duplicates';
+import AuditLog from './pages/AuditLog';
+import DataCoverage from './pages/DataCoverage';
 import { fetchNotificationCount } from './api/notifications';
 import ToastContainer from './components/ToastContainer';
 
@@ -217,12 +220,36 @@ function AppRoutes() {
             </RoleGuard>
           )}
         />
+        <Route
+          path="/duplicates"
+          element={(
+            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+              <Duplicates />
+            </RoleGuard>
+          )}
+        />
         <Route path="/notifications" element={<Notifications />} />
+        <Route
+          path="/audit-logs"
+          element={(
+            <RoleGuard user={user} roles={['ADMIN']}>
+              <AuditLog />
+            </RoleGuard>
+          )}
+        />
         <Route
           path="/imports"
           element={(
             <RoleGuard user={user} roles={['ADMIN']}>
               <Import />
+            </RoleGuard>
+          )}
+        />
+        <Route
+          path="/data-coverage"
+          element={(
+            <RoleGuard user={user} roles={['ADMIN']}>
+              <DataCoverage />
             </RoleGuard>
           )}
         />

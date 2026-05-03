@@ -12,7 +12,6 @@ export default function Login({ onLogin, bootError = '' }) {
   const [showPassword, setShowPassword] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
   const [maskedEmail, setMaskedEmail] = useState('');
-  const [maskedPhone, setMaskedPhone] = useState('');
   const [twoFaCode, setTwoFaCode] = useState(['', '', '', '', '', '']);
   const [twoFaMethod, setTwoFaMethod] = useState('email');
   const [availableMethods, setAvailableMethods] = useState([]);
@@ -67,9 +66,8 @@ export default function Login({ onLogin, bootError = '' }) {
       if (data.step === 'two_fa_required') {
         setPendingEmail(email);
         setMaskedEmail(data.email || '');
-        setMaskedPhone(data.phone || '');
-        setTwoFaMethod(data.method || 'email');
-        setAvailableMethods(data.available_methods || []);
+        setTwoFaMethod('email');
+        setAvailableMethods([]);
         setExpiresAt(Date.now() + (data.expires_in || 600) * 1000);
         setTimeLeft(data.expires_in || 600);
         setResendCooldown(60);
@@ -169,7 +167,7 @@ export default function Login({ onLogin, bootError = '' }) {
   const switchMethod = (method) => { setTwoFaMethod(method); handleResendCode(); };
   const goBackToCredentials = () => {
     setStep('credentials'); setError(''); resetTwoFa();
-    setPendingEmail(''); setMaskedEmail(''); setMaskedPhone('');
+    setPendingEmail(''); setMaskedEmail('');
   };
 
   const Svg = ({ w, h, cls, children }) => (
@@ -186,7 +184,6 @@ export default function Login({ onLogin, bootError = '' }) {
   const IconCheck = () => <Svg w={18} h={18}><path d="M20 6L9 17L4 12" strokeWidth="2.5"/></Svg>;
   const IconShield = () => <Svg w={48} h={48}><path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z"/><path d="M9 12L11 14L15 10"/></Svg>;
   const IconMail = () => <Svg w={16} h={16}><path d="M4 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4Z"/><path d="M22 6L12 13L2 6"/></Svg>;
-  const IconPhone = () => <Svg w={16} h={16}><path d="M22 16.92V19.92C22.0016 20.483 21.8126 21.029 21.467 21.469C21.1214 21.909 20.6414 22.217 20.1 22.34C19.2546 22.5312 18.3939 22.6543 17.527 22.708C11.977 23.053 6.70365 20.321 3.414 15.586C2.22897 13.8044 1.36225 11.8207 0.855 9.725C0.354 7.651 0.096 5.538 0.085 3.418C0.084 3.056 0.251 2.711 0.546 2.479C0.841 2.247 1.225 2.152 1.592 2.224C3.225 2.538 4.779 3.135 6.193 3.992C6.53 4.197 6.777 4.534 6.88 4.925C6.983 5.316 6.933 5.731 6.74 6.084C6.215 7.061 5.82 8.11 5.568 9.2C5.445 9.76 5.617 10.346 6.026 10.75L7.561 12.286C8.651 13.376 10.179 13.964 11.755 13.9C13.331 13.836 14.802 13.125 15.8 11.95C16.1 11.6 16.526 11.38 16.99 11.34C17.454 11.3 17.913 11.445 18.27 11.74C19.471 12.736 20.525 13.897 21.405 15.19C21.68 15.586 21.784 16.075 21.695 16.548C21.606 17.021 21.331 17.439 20.93 17.71L22 16.92Z"/></Svg>;
   const IconArrowLeft = () => <Svg w={16} h={16}><path d="M19 12H5M12 19L5 12L12 5"/></Svg>;
 
   const isCodeComplete = twoFaCode.every((d) => d !== '');
@@ -261,24 +258,15 @@ export default function Login({ onLogin, bootError = '' }) {
           <div style={{ display: step === 'two_fa' ? 'block' : 'none' }}>
             <div className="twofa-header">
               <div className="twofa-shield"><IconShield /></div>
-              <h2 className="twofa-title">Vérification en deux étapes</h2>
-              <p className="twofa-subtitle">Code envoyé à <strong>{twoFaMethod === 'sms' && maskedPhone ? maskedPhone : maskedEmail}</strong></p>
+              <h2 className="twofa-title">Vérification par Email</h2>
+              <p className="twofa-subtitle">Code envoyé à <strong>{maskedEmail}</strong></p>
             </div>
             {error && (
               <div className="login-error-inline" style={{ marginBottom: 16, justifyContent: 'center' }}>
                 <IconAlert /><span>{error}</span>
               </div>
             )}
-            {availableMethods.length > 1 && (
-              <div className="twofa-method-switch">
-                {availableMethods.map((method) => (
-                  <button key={method} type="button" className={'twofa-method-btn ' + (twoFaMethod === method ? 'twofa-method-active' : '')} onClick={() => switchMethod(method)} disabled={loading || resendCooldown > 0}>
-                    {method === 'email' ? <IconMail /> : <IconPhone />}
-                    {method === 'email' ? 'Email' : `+216 ${maskedPhone || ''}`}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Méthode unique forcée à Email */}
             <div className="twofa-inputs-row" onPaste={handlePaste}>
               {twoFaCode.map((digit, i) => (
                 <input key={i} ref={(el) => { inputRefs.current[i] = el; }} type="text" inputMode="numeric" maxLength={1} value={digit} onChange={(e) => handleDigitChange(i, e.target.value)} onKeyDown={(e) => handleDigitKeyDown(i, e)} className={'twofa-digit ' + (isExpired ? 'twofa-digit-expired' : '')} disabled={loading || isExpired} aria-label={'Chiffre ' + (i + 1)} />

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import api from '../api/axios';
+import JobStatusBar from '../components/JobStatusBar';
 import { formatDT } from '../lib/format';
 import MsisdnTimeline from '../components/MsisdnTimeline';
 
@@ -141,6 +142,19 @@ export default function MsisdnSearch() {
           <div style={{ flexBasis: '100%', color: 'var(--danger)', fontSize: '0.9rem' }}>{error}</div>
         )}
       </div>
+
+      {/* ETL Timeline for MSISDN search */}
+      {loading && (
+        <JobStatusBar
+          mode="timeline"
+          steps={[
+            { jobName: 'etl_agg_from_raw', label: 'Recherche OCC' },
+            { jobName: 'etl_cdr_from_tmp', label: 'Recherche MMG' },
+            { jobName: 'import_occ_csv', label: 'Calcul score risque' },
+            { jobName: 'import_mmg_csv', label: 'Construction timeline' },
+          ]}
+        />
+      )}
 
       {(cdr || reclamations !== null) && (
         <>

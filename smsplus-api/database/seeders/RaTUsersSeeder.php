@@ -20,6 +20,8 @@ class RaTUsersSeeder extends Seeder
                 'role'      => 'ADMIN',
                 'tel'       => '+216 71 000 001',
                 'actif'     => true,
+                'two_fa_enabled' => true,
+                'two_fa_method'  => 'email',
             ],
             [
                 'email'     => 'analyste.op@tt.tn',
@@ -30,9 +32,11 @@ class RaTUsersSeeder extends Seeder
                 'role'      => 'ANALYSTE_OP',
                 'tel'       => '+216 71 000 002',
                 'actif'     => true,
+                'two_fa_enabled' => true,
+                'two_fa_method'  => 'email',
             ],
             [
-                'email'     => 'analyste.buss@tt.tn',
+                'email'     => 'hegada7865@justnapa.com',
                 'password'  => Hash::make('buss123'),
                 'nom'       => 'Analyste Business',
                 'numero_personnel' => 'USR-003',
@@ -40,6 +44,8 @@ class RaTUsersSeeder extends Seeder
                 'role'      => 'ANALYSTE_BUSS',
                 'tel'       => '+216 71 000 003',
                 'actif'     => true,
+                'two_fa_enabled' => true,
+                'two_fa_method'  => 'email',
             ],
         ];
 

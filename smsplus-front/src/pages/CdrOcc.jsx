@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
+import JobStatusBar from '../components/JobStatusBar';
 import { formatDT } from '../lib/format';
 
 const PER_PAGE = 50;
@@ -178,7 +179,7 @@ export default function CdrOcc() {
         </div>
       </div>
 
-      <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
         <div>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total revenus (filtre courant)</span>
           <div className="text-heading" style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-2)' }}>{formatDT(totalCharge)}</div>
@@ -232,6 +233,15 @@ export default function CdrOcc() {
           </button>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem', textAlign: 'center' }}>Max 10 000 lignes</span>
         </div>
+        
+        {/* Job Status Dropdown */}
+        <JobStatusBar
+          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_occ_csv']}
+          title=""
+          compact={false}
+          refreshInterval={10000}
+          mode="dropdown"
+        />
       </div>
 
       {error && (

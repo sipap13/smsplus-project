@@ -9,7 +9,9 @@ use Illuminate\Http\Request;
 
 class ImportController extends Controller
 {
-
+    public function __construct(
+        protected \App\Services\AuditLogService $auditLog,
+    ) {}
 
     public function upload(Request $request)
     {
@@ -35,6 +37,8 @@ class ImportController extends Controller
         ]);
 
         ProcessImportJob::dispatch($import);
+
+        $this->auditLog->log('import', 'cdr', "Lancement import {$type} : {$originalName}", [], (array)$import, 'succes', $import->id);
 
         return response()->json([
             'import_id' => $import->id,
@@ -93,6 +97,8 @@ class ImportController extends Controller
         }
 
         $import->delete();
+
+        $this->auditLog->log('delete', 'import', "Suppression historique import #{$id} ({$import->filename})", (array)$import, [], 'succes', $id);
 
         return response()->json(['message' => 'Import supprimé']);
     }

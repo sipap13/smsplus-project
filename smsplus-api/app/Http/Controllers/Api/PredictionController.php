@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\AiProviderService;
 use App\Services\ChatbotService;
+use App\Services\StatisticalPredictor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +14,9 @@ use Illuminate\Support\Facades\Http;
 class PredictionController extends Controller
 {
     public function __construct(
-        protected ChatbotService $chatbotService
+        protected ChatbotService      $chatbotService,
+        protected AiProviderService   $aiProvider,
+        protected StatisticalPredictor $statisticalPredictor
     ) {}
 
     public function revenus(Request $request)
@@ -31,19 +35,17 @@ class PredictionController extends Controller
         $granularite = $validated['granularite'] ?? 'jour';
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
 
-        $cacheKey = 'predictions_'
-            . $horizon . '_'
-            . ($keyword ?? 'all') . '_'
-            . ($subscriberType ?? 'all') . '_'
-            . date('Y-m-d-H');
+        // Clé cache basée sur l'heure (Y-m-d-H)
+        $cacheKey = 'predictions_' . $horizon . '_' . ($keyword ?? 'all') . '_' . ($subscriberType ?? 'all') . '_' . date('Y-m-d-H');
+        $cacheDuration = 7200; // 2 heures
 
         if ($bypassCache) {
             Cache::forget($cacheKey);
+            Cache::forget($cacheKey . '_time');
         }
 
-        $cacheHit = Cache::has($cacheKey);
-        $cachedAt = $cacheHit ? now()->toIso8601String() : null;
-        $nextRefresh = $cacheHit ? now()->addMinutes(120)->toIso8601String() : null;
+        $startTime = microtime(true);
+        $this->logJobProgress('prediction_data_collect', 'running');
 
         $historiqueRaw = DB::table('ra_t_occ_cdr_detail')
             ->selectRaw("
@@ -70,105 +72,143 @@ class PredictionController extends Controller
             ->get()
             ->map(function ($row) {
                 return [
-                    'start_date' => (string) $row->start_date,
-                    'keyword' => (string) ($row->keyword ?? 'AUTRE'),
-                    'subscriber_type' => (string) ($row->subscriber_type ?? 'INCONNU'),
-                    'total_revenus' => (float) ($row->total_revenus ?? 0),
-                    'nb_cdr' => (int) ($row->nb_cdr ?? 0),
-                    'nb_abonnes' => (int) ($row->nb_abonnes ?? 0),
-                    'revenu_moyen' => (float) ($row->revenu_moyen ?? 0),
-                    'revenu_max' => (float) ($row->revenu_max ?? 0),
-                    'revenu_min' => (float) ($row->revenu_min ?? 0),
+                    'start_date'     => (string) $row->start_date,
+                    'keyword'        => (string) ($row->keyword ?? 'AUTRE'),
+                    'subscriber_type'=> (string) ($row->subscriber_type ?? 'INCONNU'),
+                    'total_revenus'  => (float) ($row->total_revenus ?? 0),
+                    'nb_cdr'         => (int) ($row->nb_cdr ?? 0),
+                    'nb_abonnes'     => (int) ($row->nb_abonnes ?? 0),
+                    'revenu_moyen'   => (float) ($row->revenu_moyen ?? 0),
+                    'revenu_max'     => (float) ($row->revenu_max ?? 0),
+                    'revenu_min'     => (float) ($row->revenu_min ?? 0),
                 ];
             })
             ->toArray();
+
+        $this->logJobProgress('prediction_data_collect', 'success', (int)((microtime(true) - $startTime) * 1000));
+        $this->logJobProgress('prediction_metrics_calc', 'running');
+        $startMetrics = microtime(true);
 
         $historique = $this->aggregateByGranularity($historiqueRaw, $granularite);
 
         if (count($historique) < 7) {
             return response()->json([
-                'insuffisant' => true,
-                'message' => 'Donnees insuffisantes pour une prediction fiable (minimum 7 jours requis, actuellement '.count($historique).' jours)',
+                'insuffisant'         => true,
+                'message'             => 'Donnees insuffisantes pour une prediction fiable (minimum 7 jours requis, actuellement '.count($historique).' jours)',
                 'redirect_suggestion' => '/import',
-                'historique' => $historique,
-                'predictions' => [],
+                'historique'          => $historique,
+                'predictions'         => [],
                 'predictions_par_service' => [],
-                'resume_semaine' => null,
-                'analyse_detaillee' => null,
-                'recommandations' => [],
-                'stats' => $this->computeStats($historique),
-                'metriques_avancees' => null,
-                'score_fiabilite' => 0,
+                'resume_semaine'      => null,
+                'analyse_detaillee'   => null,
+                'recommandations'     => [],
+                'stats'               => $this->computeStats($historique),
+                'metriques_avancees'  => null,
+                'score_fiabilite'     => 0,
+                'ai_provider'         => 'none',
+                'ai_model'            => null,
+                'ai_fallback'         => false,
             ]);
         }
 
-        $stats = $this->computeStats($historique);
+        $stats    = $this->computeStats($historique);
         $metriques = $this->computeAdvancedMetrics($historique, $historiqueRaw);
+        
+        $this->logJobProgress('prediction_metrics_calc', 'success', (int)((microtime(true) - $startMetrics) * 1000));
 
-        $result = Cache::remember($cacheKey, 7200, function () use ($historique, $stats, $metriques, $horizon) {
-            try {
-                $prompt = $this->buildPrompt($historique, $stats, $metriques, $horizon);
+        $cacheHit = Cache::has($cacheKey);
+        
+        $predictions = Cache::remember($cacheKey, $cacheDuration, function () use ($historique, $stats, $metriques, $horizon, $cacheKey, $cacheDuration) {
+            $this->logJobProgress('prediction_groq_call', 'running');
+            $startAi = microtime(true);
 
-                $response = Http::withHeaders([
-                    'Authorization' => 'Bearer '.$this->chatbotService->getGroqApiKey(),
-                    'Content-Type' => 'application/json',
-                ])->timeout(45)->post($this->chatbotService->getGroqEndpoint(), [
-                    'model' => $this->chatbotService->getGroqModel(),
-                    'messages' => [
-                        ['role' => 'system', 'content' => 'Tu es un expert senior en analyse financiere telecom chez Tunisie Telecom, specialise en services VAS SMS+. Tu reponds UNIQUEMENT en JSON valide strict, sans markdown, sans texte hors JSON.'],
-                        ['role' => 'user',   'content' => $prompt],
-                    ],
-                    'temperature' => 0.3,
-                    'max_tokens' => 3000,
-                    'top_p' => 1,
-                ]);
+            $systemPrompt = 'Tu es un expert senior en analyse financiere telecom chez Tunisie Telecom, specialise en services VAS SMS+. Tu reponds UNIQUEMENT en JSON valide strict, sans markdown, sans texte hors JSON.';
+            $userPrompt   = $this->buildPrompt($historique, $stats, $metriques, $horizon);
 
-                if (! $response->successful()) {
-                    throw new \RuntimeException('Groq API error: '.$response->body());
+            $aiResult = $this->aiProvider->complete($systemPrompt, $userPrompt, 3000, 0.3, $historique);
+            
+            if ($aiResult['provider'] === 'php_fallback') {
+                $data = $this->statisticalPredictor->predict($historique, $horizon);
+                $data['provider_original'] = 'php_fallback';
+                $data['ai_model'] = 'statistical_model_v2';
+            } else {
+                $data = $this->parseAiResponse($aiResult['content']);
+                if (!$data) {
+                    $data = $this->statisticalPredictor->predict($historique, $horizon);
+                    $data['provider_original'] = 'php_fallback';
+                    $data['ai_model'] = 'statistical_model_v2';
+                } else {
+                    $data['provider_original'] = $aiResult['provider'];
+                    $data['ai_model'] = $aiResult['model'];
                 }
-
-                $content = trim($response->json('choices.0.message.content', ''));
-                $parsed = $this->parseGroqJson($content);
-
-                return [
-                    'predictions_journalieres' => $parsed['predictions_journalieres'] ?? [],
-                    'predictions_par_service' => $parsed['predictions_par_service'] ?? [],
-                    'resume_semaine' => $parsed['resume_semaine'] ?? null,
-                    'analyse_detaillee' => $parsed['analyse_detaillee'] ?? null,
-                    'recommandations' => $parsed['recommandations'] ?? [],
-                    'score_fiabilite' => $parsed['score_fiabilite'] ?? 70,
-                    'methodologie' => $parsed['methodologie'] ?? 'Analyse de series temporelles sur 60 jours avec modele de langage avance.',
-                    'source' => 'groq',
-                ];
-            } catch (\Throwable $e) {
-                return $this->fallbackPredictions($historique, $stats, $metriques, $horizon);
             }
+
+            $data['ai_provider'] = $aiResult['provider'];
+            $data['ai_fallback'] = $aiResult['fallback'];
+            
+            $this->logJobProgress('prediction_groq_call', 'success', (int)((microtime(true) - $startAi) * 1000));
+            $this->logJobProgress('prediction_cache_save', 'running');
+
+            // Ajustement du score
+            $data = $this->adjustScoreByProvider($data, $aiResult['provider'], count($historique));
+            
+            // Sauvegarde du timestamp
+            Cache::put($cacheKey . '_time', now(), $cacheDuration);
+            
+            $this->logJobProgress('prediction_cache_save', 'success');
+
+            return $data;
         });
 
         return response()->json([
-            'historique' => $historique,
-            'predictions' => $result['predictions_journalieres'],
-            'predictions_par_service' => $result['predictions_par_service'],
-            'resume_semaine' => $result['resume_semaine'],
-            'analyse_detaillee' => $result['analyse_detaillee'],
-            'recommandations' => $result['recommandations'],
-            'score_fiabilite' => $result['score_fiabilite'],
-            'methodologie' => $result['methodologie'],
-            'stats' => $stats,
-            'metriques_avancees' => $metriques,
-            'source' => $result['source'] ?? 'groq',
+            'historique'              => $historique,
+            'predictions'             => $predictions['predictions_journalieres'] ?? [],
+            'predictions_par_service' => $predictions['predictions_par_service']  ?? [],
+            'resume_semaine'          => $predictions['resume_semaine']            ?? null,
+            'analyse_detaillee'       => $predictions['analyse_detaillee']         ?? null,
+            'recommandations'         => $predictions['recommandations']           ?? [],
+            'score_fiabilite'         => $predictions['score_fiabilite']           ?? 0,
+            'methodologie'            => $predictions['methodologie']              ?? '',
+            'stats'                   => $stats,
+            'metriques_avancees'      => $metriques,
+            'source'                  => $predictions['provider_original'] ?? $predictions['ai_provider'],
+            'ai_provider'             => $predictions['ai_provider'],
+            'ai_model'                => $predictions['ai_model'],
+            'ai_fallback'             => $predictions['ai_fallback'],
+            'cache_hit'               => $cacheHit,
+            'cached_at'               => Cache::get($cacheKey . '_time'),
+            'provider_original'       => $predictions['provider_original'] ?? $predictions['ai_provider'],
             'params' => [
-                'keyword' => $keyword,
-                'subscriber_type' => $subscriberType,
-                'horizon' => $horizon,
-                'granularite' => $granularite,
+                'keyword'        => $keyword,
+                'subscriber_type'=> $subscriberType,
+                'horizon'        => $horizon,
+                'granularite'    => $granularite,
             ],
             'cache' => [
-                'cache_hit' => $cacheHit,
-                'cached_at' => $cachedAt,
-                'next_refresh' => $nextRefresh,
+                'cache_hit'   => $cacheHit,
+                'cached_at'   => Cache::get($cacheKey . '_time'),
+                'next_refresh'=> $cacheHit ? null : now()->addSeconds($cacheDuration)->toIso8601String(),
             ],
         ]);
+    }
+
+    private function logJobProgress(string $jobName, string $status, ?int $duration = null, ?array $metadata = null)
+    {
+        try {
+            DB::table('ra_t_etl_jobs')->updateOrInsert(
+                ['job_name' => $jobName],
+                [
+                    'status' => $status,
+                    'started_at' => now(),
+                    'ended_at' => $status === 'success' ? now() : null,
+                    'duration_ms' => $duration,
+                    'metadata' => $metadata ? json_encode($metadata) : null,
+                    'updated_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            // silent fail
+        }
     }
 
     protected function aggregateByGranularity(array $rows, string $granularite): array
@@ -628,6 +668,95 @@ Reponds UNIQUEMENT en JSON valide sans texte avant/apres :
 Important : genere exactement '.$horizon.' jours dans predictions_journalieres. Les dates doivent etre consecutives a partir de demain.';
 
         return $prompt;
+    }
+
+    private function parseAiResponse(?string $content): ?array
+    {
+        if (!$content) return null;
+
+        try {
+            $data = json_decode($content, true);
+
+            if (!$data) {
+                preg_match('/\{.*\}/s', $content, $matches);
+                if ($matches) {
+                    $data = json_decode($matches[0], true);
+                }
+            }
+
+            if (!$data) return null;
+
+            // Assure que score_fiabilite est toujours présent et valide
+            if (!isset($data['score_fiabilite']) || $data['score_fiabilite'] === null || $data['score_fiabilite'] === 0) {
+                // Score par défaut plus élevé pour les IAs modernes
+                $data['score_fiabilite'] = 82;
+            }
+
+            $data['score_fiabilite'] = max(1, min(100, (int)$data['score_fiabilite']));
+
+            if (empty($data['predictions_journalieres'])) {
+                return null;
+            }
+
+            foreach ($data['predictions_journalieres'] as &$pred) {
+                $pred['confidence_pct'] = max(1, min(100, (int)($pred['confidence_pct'] ?? 70)));
+                $pred['revenus_predit'] = max(0.001, (float)($pred['revenus_predit'] ?? 0));
+                $pred['revenus_min'] = max(0.001, (float)($pred['revenus_min'] ?? $pred['revenus_predit'] * 0.8));
+                $pred['revenus_max'] = max($pred['revenus_predit'], (float)($pred['revenus_max'] ?? $pred['revenus_predit'] * 1.2));
+                $pred['confidence'] = $pred['confidence'] ?? 'medium';
+                $pred['tendance'] = $pred['tendance'] ?? 'stable';
+                $pred['variation_pct'] = (float)($pred['variation_pct'] ?? 0);
+                $pred['facteurs'] = $pred['facteurs'] ?? [];
+            }
+
+            return $data;
+        } catch (\Exception $e) {
+            \Log::warning('[AI] Parse JSON échoué: ' . $e->getMessage() . ' | Content: ' . substr($content, 0, 200));
+            return null;
+        }
+    }
+
+    private function adjustScoreByProvider(array $predictions, string $provider, int $nbJoursHistorique): array
+    {
+        $baseScore = 40;
+        if ($nbJoursHistorique >= 60) $baseScore = 80;
+        elseif ($nbJoursHistorique >= 30) $baseScore = 70;
+        elseif ($nbJoursHistorique >= 14) $baseScore = 60;
+        elseif ($nbJoursHistorique >= 7)  $baseScore = 50;
+
+        $providerBonus = match($provider) {
+            'groq'          => 15,  // Bonus augmenté
+            'gemini'        => 12,  // Bonus Gemini augmenté significativement
+            'php_fallback'  => -15,
+            default         => 0,
+        };
+
+        $finalScore = max(1, min(100, $baseScore + $providerBonus));
+
+        if (($predictions['score_fiabilite'] ?? 0) > 1) {
+            $predictions['score_fiabilite'] = max(1, min(100, $predictions['score_fiabilite'] + $providerBonus));
+        } else {
+            $predictions['score_fiabilite'] = $finalScore;
+        }
+
+        return $predictions;
+    }
+
+    public function clearCache(Request $request)
+    {
+        $horizon = $request->input('horizon', 7);
+        $keyword = $request->input('keyword');
+        $subscriberType = $request->input('subscriber_type');
+
+        $cacheKey = 'predictions_' . $horizon . '_' . ($keyword ?? 'all') . '_' . ($subscriberType ?? 'all') . '_' . date('Y-m-d-H');
+
+        Cache::forget($cacheKey);
+        Cache::forget($cacheKey . '_time');
+
+        return response()->json([
+            'message' => 'Cache vidé',
+            'key'     => $cacheKey,
+        ]);
     }
 
     protected function parseGroqJson(string $content): array

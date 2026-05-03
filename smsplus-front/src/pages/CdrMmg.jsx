@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
+import JobStatusBar from '../components/JobStatusBar';
 
 const PER_PAGE = 50;
 
@@ -161,7 +162,7 @@ export default function CdrMmg() {
         </div>
       </div>
 
-      <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
         <div>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total CDR (filtre courant)</span>
           <div className="text-heading" style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-2)' }}>{total.toLocaleString('fr-FR')}</div>
@@ -211,6 +212,15 @@ export default function CdrMmg() {
           </button>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem', textAlign: 'center' }}>Max 10 000 lignes</span>
         </div>
+        
+        {/* Job Status Dropdown */}
+        <JobStatusBar
+          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_mmg_csv']}
+          title=""
+          compact={false}
+          refreshInterval={10000}
+          mode="dropdown"
+        />
       </div>
 
       {error && (

@@ -1,6 +1,8 @@
-/* eslint-disable react/prop-types */
-import { useCallback, useEffect, useRef, useState } from 'react';
+
+
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../api/axios';
+import JobStatusBar from '../components/JobStatusBar';
 
 /* ───────── Helpers ───────── */
 function formatBytes(bytes) {
@@ -477,6 +479,14 @@ export default function Import() {
           )}
         </div>
       </div>
+
+            {/* ── ETL MONITORING ── */}
+      <JobStatusBar
+        jobTypes={['import_occ_csv', 'import_occ_xlsx', 'import_mmg_csv', 'import_mmg_xlsx', 'etl_cdr_from_tmp', 'etl_agg_from_raw']}
+        title="Traitements ETL"
+        compact={false}
+        refreshInterval={5000}
+      />
 
       {/* ── HISTORIQUE ── */}
       <HistoryTable

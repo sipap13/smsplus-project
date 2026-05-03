@@ -8,14 +8,18 @@ use App\Exports\CdrOccExport;
 use App\Exports\ServicesExport;
 use App\Http\Controllers\Controller;
 use App\Services\NotificationService;
+use App\Services\EtlMonitorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ExportController extends Controller
 {
     public function __construct(
-        protected NotificationService $notificationService
+        protected NotificationService $notificationService,
+        protected EtlMonitorService $monitor,
+        protected \App\Services\AuditLogService $auditLog,
     ) {}
 
     /**
@@ -23,13 +27,54 @@ class ExportController extends Controller
      */
     public function exportOcc(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'export_occ_excel',
+                'rapport',
+                'CDR_OCC_' . date('Y-m-d') . '.xlsx',
+                0,
+                ['page' => 'CDR OCC', 'triggered_by' => 'user']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for export_occ_excel', ['error' => $e->getMessage()]);
+        }
+
         $startDate = $request->query('start_date');
         $keyword = $request->query('keyword');
         $subscriberType = $request->query('subscriber_type');
         $partner = $request->query('partner');
 
         $filename = 'CDR_OCC_'.now()->format('Y-m-d').'.xlsx';
-        $this->notifyReportForRequester($request, now()->format('Y-m'));
+        $this->notifyReportForRequester($request, now()->format('Y-m'), "CDR OCC");
+
+        // Simuler le nombre de lignes exportées (à adapter selon votre logique)
+        $count = 0;
+        if ($startDate || $keyword || $subscriberType || $partner) {
+            $base = DB::table('ra_t_occ_cdr_detail');
+            if ($startDate) $base->where('start_date', $startDate);
+            if ($keyword) $base->where('keyword', $keyword);
+            if ($subscriberType) $base->where('subscriber_type', $subscriberType);
+            if ($partner) $base->where('partner', 'LIKE', '%' . $partner . '%');
+            $count = $base->count();
+        }
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_lignes' => $count,
+                    'nom_fichier' => $filename,
+                    'filtres' => array_filter([
+                        'start_date' => $startDate,
+                        'keyword' => $keyword,
+                        'subscriber_type' => $subscriberType,
+                        'partner' => $partner,
+                    ]),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for export_occ_excel', ['error' => $e->getMessage()]);
+        }
 
         return Excel::download(
             new CdrOccExport($startDate, $keyword, $subscriberType, $partner),
@@ -42,12 +87,46 @@ class ExportController extends Controller
      */
     public function exportMmg(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'export_mmg_excel',
+                'rapport',
+                'CDR_MMG_' . date('Y-m-d') . '.xlsx',
+                0,
+                ['page' => 'CDR MMG']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for export_mmg_excel', ['error' => $e->getMessage()]);
+        }
+
         $startDate = $request->query('start_date');
         $eventStatus = $request->query('event_status');
         $subscriberType = $request->query('subscriber_type');
 
         $filename = 'CDR_MMG_'.now()->format('Y-m-d').'.xlsx';
-        $this->notifyReportForRequester($request, now()->format('Y-m'));
+        $this->notifyReportForRequester($request, now()->format('Y-m'), "CDR MMG");
+
+        // Simuler le nombre de lignes exportées
+        $count = 0;
+        if ($startDate || $eventStatus || $subscriberType) {
+            $base = DB::table('ra_t_mmg_cdr_det');
+            if ($startDate) $base->where('start_date', $startDate);
+            if ($eventStatus) $base->where('event_status', $eventStatus);
+            if ($subscriberType) $base->where('subscriber_type', $subscriberType);
+            $count = $base->count();
+        }
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_lignes' => $count,
+                    'nom_fichier' => $filename,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for export_mmg_excel', ['error' => $e->getMessage()]);
+        }
 
         return Excel::download(
             new CdrMmgExport($startDate, $eventStatus, $subscriberType),
@@ -60,8 +139,34 @@ class ExportController extends Controller
      */
     public function exportServices(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'export_services_excel',
+                'rapport',
+                null,
+                0,
+                ['page' => 'Services VAS']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for export_services_excel', ['error' => $e->getMessage()]);
+        }
+
         $filename = 'Services_'.now()->format('Y-m-d').'.xlsx';
-        $this->notifyReportForRequester($request, now()->format('Y-m'));
+        $this->notifyReportForRequester($request, now()->format('Y-m'), "Services");
+
+        $count = DB::table('ra_t_services')->count();
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_services' => $count,
+                    'nom_fichier' => $filename,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for export_services_excel', ['error' => $e->getMessage()]);
+        }
 
         return Excel::download(
             new ServicesExport,
@@ -74,8 +179,34 @@ class ExportController extends Controller
      */
     public function exportAlerts(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'export_alertes_excel',
+                'rapport',
+                null,
+                0,
+                ['page' => 'Alertes fraude']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for export_alertes_excel', ['error' => $e->getMessage()]);
+        }
+
         $filename = 'Alertes_'.now()->format('Y-m-d').'.xlsx';
-        $this->notifyReportForRequester($request, now()->format('Y-m'));
+        $this->notifyReportForRequester($request, now()->format('Y-m'), "Alertes Fraude");
+
+        $count = DB::table('ra_t_alerts')->count();
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_alertes' => $count,
+                    'nom_fichier' => $filename,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for export_alertes_excel', ['error' => $e->getMessage()]);
+        }
 
         return Excel::download(
             new AlertsExport,
@@ -85,6 +216,19 @@ class ExportController extends Controller
 
     public function revenusCsv(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'export_revenus_csv',
+                'rapport',
+                null,
+                0,
+                ['page' => 'Revenus détaillés']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for export_revenus_csv', ['error' => $e->getMessage()]);
+        }
+
         $allowedCallTypes = ['VAS', 'SMS', 'VOICE'];
         $includeData = in_array(strtolower((string) $request->query('include_data', '0')), ['1', 'true', 'yes'], true);
         $days = max(1, min((int) $request->query('days', 30), 365));
@@ -108,7 +252,19 @@ class ExportController extends Controller
             ->get();
 
         $filename = 'revenus_export_'.now()->format('Ymd_His').'.csv';
-        $this->notifyReportForRequester($request, now()->format('Y-m'));
+        $this->notifyReportForRequester($request, now()->format('Y-m'), "Revenus détaillés");
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_lignes' => $rows->count(),
+                    'periode_jours' => $days,
+                    'nom_fichier' => $filename,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for export_revenus_csv', ['error' => $e->getMessage()]);
+        }
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
@@ -136,7 +292,7 @@ class ExportController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
-    private function notifyReportForRequester(Request $request, string $month): void
+    private function notifyReportForRequester(Request $request, string $month, string $type = 'Rapport'): void
     {
         $user = $request->attributes->get('auth_user');
         $userId = (int) ($user->id ?? 0);
@@ -144,5 +300,6 @@ class ExportController extends Controller
             return;
         }
         $this->notificationService->notifyReportReady($userId, $month);
+        $this->auditLog->log('export', 'rapport', "Export $type : Période $month");
     }
 }

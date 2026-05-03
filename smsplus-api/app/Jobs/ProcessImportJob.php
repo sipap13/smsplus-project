@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Import;
+use App\Services\EtlMonitorService;
 use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -35,12 +36,21 @@ class ProcessImportJob implements ShouldQueue
 
         $this->import->update(['status' => 'processing', 'started_at' => now()]);
 
+        /** @var EtlMonitorService $monitor */
+        $monitor = app(EtlMonitorService::class);
+        $jobName = "import_{$type}_" . strtolower(pathinfo($this->import->filename, PATHINFO_EXTENSION));
+        $etlJob = $monitor->startJob($jobName, 'import', [
+            'filename' => $this->import->filename,
+            'import_id' => $this->import->id,
+            'type' => $type,
+        ]);
+
         $ext = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
 
         try {
             $count = match ($ext) {
-                'csv' => $this->importCsvFile($type, $path),
-                'xlsx', 'xls' => $this->importExcelFile($type, $path),
+                'csv' => $this->importCsvFile($type, $path, $monitor, $etlJob),
+                'xlsx', 'xls' => $this->importExcelFile($type, $path, $monitor, $etlJob),
                 default => throw new \RuntimeException("Extension non supportée : .{$ext}"),
             };
 
@@ -50,9 +60,11 @@ class ProcessImportJob implements ShouldQueue
                 'finished_at' => now(),
             ]);
 
+            $monitor->finishJob($etlJob, ['rows_inserted' => $count]);
             $this->notifyImportResult($count, false);
         } catch (\Throwable $e) {
             $this->failImport($e->getMessage());
+            $monitor->failJob($etlJob, $e->getMessage());
             $this->notifyImportResult(0, true);
         } finally {
             if (file_exists($path)) {
@@ -61,7 +73,7 @@ class ProcessImportJob implements ShouldQueue
         }
     }
 
-    private function importCsvFile(string $type, string $path): int
+    private function importCsvFile(string $type, string $path, EtlMonitorService $monitor, \App\Models\EtlJob $etlJob): int
     {
         $handle = fopen($path, 'r');
         if ($handle === false) {
@@ -96,12 +108,16 @@ class ProcessImportJob implements ShouldQueue
                     $total += count($batch);
                     $batch = [];
                     $this->updateProgress($total, $errors);
+                    $pct = $fileTotal > 0 ? (int) round(($total / $fileTotal) * 100) : 0;
+                    $monitor->updateProgress($etlJob, $pct, ['rows_inserted' => $total, 'rows_processed' => $total + $errors]);
                 }
             }
             if ($batch !== []) {
                 $this->insertBatch($type, $batch);
                 $total += count($batch);
                 $this->updateProgress($total, $errors);
+                $pct = $fileTotal > 0 ? (int) round(($total / $fileTotal) * 100) : 100;
+                $monitor->updateProgress($etlJob, $pct, ['rows_inserted' => $total, 'rows_processed' => $total + $errors]);
             }
         } finally {
             fclose($handle);
@@ -110,7 +126,7 @@ class ProcessImportJob implements ShouldQueue
         return $total;
     }
 
-    private function importExcelFile(string $type, string $path): int
+    private function importExcelFile(string $type, string $path, EtlMonitorService $monitor, \App\Models\EtlJob $etlJob): int
     {
         $sheets = Excel::toArray([], $path);
         if (empty($sheets) || empty($sheets[0]) || ! is_array($sheets[0][0] ?? null)) {
@@ -143,12 +159,16 @@ class ProcessImportJob implements ShouldQueue
                 $total += count($batch);
                 $batch = [];
                 $this->updateProgress($total, $errors);
+                $pct = $fileTotal > 0 ? (int) round(($total / $fileTotal) * 100) : 0;
+                $monitor->updateProgress($etlJob, $pct, ['rows_inserted' => $total, 'rows_processed' => $total + $errors]);
             }
         }
         if ($batch !== []) {
             $this->insertBatch($type, $batch);
             $total += count($batch);
             $this->updateProgress($total, $errors);
+            $pct = $fileTotal > 0 ? (int) round(($total / $fileTotal) * 100) : 100;
+            $monitor->updateProgress($etlJob, $pct, ['rows_inserted' => $total, 'rows_processed' => $total + $errors]);
         }
 
         return $total;

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\NotificationService;
+use App\Services\EtlMonitorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -11,7 +12,9 @@ use Illuminate\Support\Facades\Log;
 class AlertController extends Controller
 {
     public function __construct(
-        protected NotificationService $notificationService
+        protected NotificationService $notificationService,
+        protected EtlMonitorService $monitor,
+        protected \App\Services\AuditLogService $auditLog,
     ) {}
 
     public function index()
@@ -23,6 +26,19 @@ class AlertController extends Controller
 
     public function store(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'alerte_create',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Alertes fraude', 'keyword' => $request->keyword]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for alerte_create', ['error' => $e->getMessage()]);
+        }
+
         $validated = $request->validate([
             'start_date' => 'required|date',
             'nom_service' => 'nullable|string|max:100',
@@ -60,7 +76,22 @@ class AlertController extends Controller
             ]);
         }
 
-        return response()->json(DB::table('ra_t_alerts')->find($id), 201);
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'alerte_id' => $id,
+                    'keyword' => $validated['keyword'],
+                    'motif' => $validated['motif'] ?? 'Alerte fraude',
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for alerte_create', ['error' => $e->getMessage()]);
+        }
+
+        $alert = DB::table('ra_t_alerts')->find($id);
+        $this->auditLog->log('create', 'alerte', "Alerte créée sur " . ($alert->keyword ?? 'N/A') . " (Motif: " . ($alert->motif ?? 'N/A') . ")", [], (array)$alert, 'succes', $id);
+
+        return response()->json($alert, 201);
     }
 
     /**
@@ -68,8 +99,28 @@ class AlertController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'alerte_update',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Alertes fraude', 'alerte_id' => $id]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for alerte_update', ['error' => $e->getMessage()]);
+        }
+
         $alert = DB::table('ra_t_alerts')->find($id);
         if (! $alert) {
+            try {
+                if ($jobId) {
+                    $this->monitor->failJob($jobId, 'Alerte introuvable');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService failJob failed for alerte_update', ['error' => $e->getMessage()]);
+            }
             return response()->json(['message' => 'Alerte introuvable'], 404);
         }
 
@@ -96,8 +147,17 @@ class AlertController extends Controller
             }
         }
 
+        $avant = (array)$alert;
         DB::table('ra_t_alerts')->where('id', $id)->update($payload);
+        $apres = (array) DB::table('ra_t_alerts')->find($id);
 
-        return response()->json(DB::table('ra_t_alerts')->find($id));
+        $description = "Alerte modifiée";
+        if (isset($payload['status'])) {
+            $description = $payload['status'] ? "Alerte résolue" : "Alerte réouverte";
+        }
+
+        $this->auditLog->log('update', 'alerte', $description, $avant, $apres, 'succes', $id);
+
+        return response()->json($apres);
     }
 }

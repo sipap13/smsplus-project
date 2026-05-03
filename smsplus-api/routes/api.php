@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\AiChatController;
+use App\Http\Controllers\Api\AiHealthController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CdrController;
 use App\Http\Controllers\Api\ChatbotController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\EtlMonitorController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FraudController;
 use App\Http\Controllers\Api\ImportController;
@@ -14,6 +16,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PredictionController;
 use App\Http\Controllers\Api\ReclamationController;
 use App\Http\Controllers\Api\ServiceController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,15 +38,32 @@ Route::get('/me', [AuthController::class, 'me'])->middleware('auth.api');
 // Dashboard
 Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->middleware('auth.api');
 Route::get('/dashboard/revenus', [DashboardController::class, 'revenus'])->middleware('auth.api');
+Route::get('/dashboard/revenus-enrichi', [DashboardController::class, 'revenusEnrichi'])->middleware('auth.api');
+Route::get('/dashboard/alertes-recentes', [DashboardController::class, 'alertesRecentes'])->middleware('auth.api');
 Route::get('/dashboard/range', [MetaController::class, 'dashboardRange'])->middleware('auth.api');
 Route::get('/dashboard/revenus-monthly', [DashboardController::class, 'revenusMonthly'])->middleware('auth.api');
 Route::get('/dashboard/revenus-fournisseur', [DashboardController::class, 'revenusByFournisseur'])->middleware('auth.api');
 Route::get('/dashboard/top-services', [DashboardController::class, 'topServices'])->middleware('auth.api');
 Route::get('/dashboard/mmg-vs-occ', [DashboardController::class, 'mmgVsOcc'])->middleware('auth.api');
+Route::get('/dashboard/trafic-mmg-occ', [DashboardController::class, 'traficMmgOcc'])->middleware('auth.api');
+Route::get('/dashboard/revenus-par-service', [DashboardController::class, 'revenusParService'])->middleware('auth.api');
+Route::get('/dashboard/top-services-enrichi', [DashboardController::class, 'topServicesEnrichi'])->middleware('auth.api');
+Route::get('/dashboard/data-coverage', [DashboardController::class, 'dataCoverage'])->middleware(['auth.api', 'role:ADMIN']);
+Route::get('/dashboard/repartition-abonnes', [DashboardController::class, 'repartitionAbonnes'])->middleware('auth.api');
+Route::get('/dashboard/mmg-success-rate', [DashboardController::class, 'mmgSuccessRate'])->middleware('auth.api');
+Route::get('/dashboard/etl-health', [DashboardController::class, 'etlHealth'])->middleware('auth.api');
+Route::get('/dashboard/billing-integrity', [DashboardController::class, 'billingIntegrity'])->middleware('auth.api');
+Route::get('/dashboard/repartition-roaming', [DashboardController::class, 'repartitionRoaming'])->middleware('auth.api');
+
+// ETL Monitoring
+Route::get('/etl/jobs/by-types', [EtlMonitorController::class, 'byTypes'])->middleware('auth.api');
+Route::get('/etl/stats', [EtlMonitorController::class, 'stats'])->middleware('auth.api');
+Route::get('/etl/jobs', [EtlMonitorController::class, 'index'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
 
 // Services : lecture pour tous les profils authentifiés (ex. dashboard) ; écriture réservée aux ADMIN
 Route::get('/services', [ServiceController::class, 'index'])->middleware('auth.api');
 Route::get('/services/{id}', [ServiceController::class, 'show'])->middleware('auth.api');
+Route::get('/services/{keyword}/diagnostic-alertes', [ServiceController::class, 'diagnosticAlertes'])->middleware('auth.api');
 Route::post('/services', [ServiceController::class, 'store'])->middleware(['auth.api', 'role:ADMIN']);
 Route::put('/services/{id}', [ServiceController::class, 'update'])->middleware(['auth.api', 'role:ADMIN']);
 Route::delete('/services/{id}', [ServiceController::class, 'destroy'])->middleware(['auth.api', 'role:ADMIN']);
@@ -80,9 +100,20 @@ Route::get('/cdr/msisdn/{msisdn}/timeline', [CdrController::class, 'timeline'])-
 Route::get('/fraud/usage-high', [FraudController::class, 'usageHigh'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
 Route::post('/chatbot/analyze', [ChatbotController::class, 'analyze'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP,ANALYSTE_BUSS']);
 Route::post('/ai/chat', [AiChatController::class, 'chat'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP,ANALYSTE_BUSS']);
+Route::get('/ai/health', [AiHealthController::class, 'health'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
 
 // Prédictions IA
 Route::get('/predictions/revenus', [PredictionController::class, 'revenus'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_BUSS']);
+Route::delete('/predictions/cache', [PredictionController::class, 'clearCache'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_BUSS']);
+
+// Détection de Doublons CDR
+Route::prefix('duplicates')->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP'])->group(function () {
+    Route::get('/occ', [\App\Http\Controllers\Api\DuplicateController::class, 'detectOcc']);
+    Route::get('/mmg', [\App\Http\Controllers\Api\DuplicateController::class, 'detectMmg']);
+    Route::get('/stats', [\App\Http\Controllers\Api\DuplicateController::class, 'stats']);
+    Route::post('/supprimer-occ', [\App\Http\Controllers\Api\DuplicateController::class, 'supprimerOcc'])->middleware('role:ADMIN');
+    Route::post('/supprimer-tous-occ', [\App\Http\Controllers\Api\DuplicateController::class, 'supprimerTousOcc'])->middleware('role:ADMIN');
+});
 
 // Imports (ADMIN uniquement)
 Route::post('/imports/upload', [ImportController::class, 'upload'])->middleware(['auth.api', 'role:ADMIN']);
@@ -100,3 +131,8 @@ Route::prefix('notifications')->middleware('auth.api')->group(function () {
     Route::delete('/vider', [NotificationController::class, 'vider']);
 });
 
+// Audit Logs (ADMIN uniquement)
+Route::prefix('audit-logs')->middleware(['auth.api', 'role:ADMIN'])->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\AuditLogController::class, 'index']);
+    Route::get('/stats', [\App\Http\Controllers\Api\AuditLogController::class, 'stats']);
+});

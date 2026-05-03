@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\EtlMonitorService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -24,15 +25,40 @@ class EtlAggFromRaw extends Command
         }
 
         $dry = (bool) $this->option('dry-run');
-
-        if ($source === 'occ' || $source === 'all') {
-            $this->etlOcc($dry);
+        /** @var EtlMonitorService $monitor */
+        try {
+            $monitor = app(EtlMonitorService::class);
+            $this->info('EtlMonitorService loaded successfully');
+        } catch (\Exception $e) {
+            $this->error('Failed to load EtlMonitorService: ' . $e->getMessage());
+            return self::FAILURE;
         }
-        if ($source === 'mmg' || $source === 'all') {
-            $this->etlMmg($dry);
+
+        try {
+            $job = $monitor->startJob('etl_agg_from_raw', 'command', ['source' => $source, 'dry_run' => $dry]);
+            $this->info('ETL job started with ID: ' . $job->id);
+        } catch (\Exception $e) {
+            $this->error('Failed to start ETL job: ' . $e->getMessage());
+            return self::FAILURE;
         }
 
-        return self::SUCCESS;
+        try {
+            if ($source === 'occ' || $source === 'all') {
+                $this->etlOcc($dry);
+            }
+            if ($source === 'mmg' || $source === 'all') {
+                $this->etlMmg($dry);
+            }
+
+            $monitor->finishJob($job, ['rows_processed' => DB::table('ra_t_occ_agg')->count() + DB::table('ra_t_mmg_agg')->count()]);
+            $this->info('ETL agg-from-raw terminé avec succès.');
+
+            return self::SUCCESS;
+        } catch (\Throwable $e) {
+            $monitor->failJob($job, $e->getMessage());
+            $this->error('ETL agg-from-raw échoué : ' . $e->getMessage());
+            throw $e;
+        }
     }
 
     private function etlOcc(bool $dry): void
@@ -112,4 +138,3 @@ WHERE NULLIF(TRIM(start_date_raw), '') IS NOT NULL
         $this->info('MMG AGG normalized: OK');
     }
 }
-

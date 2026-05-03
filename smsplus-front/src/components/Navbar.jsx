@@ -9,6 +9,12 @@ const PAGES = [
   { id: 'cdr-mmg', label: 'CDR MMG', path: '/cdr/mmg', hint: 'Navigation' },
   { id: 'msisdn', label: 'Recherche MSISDN', path: '/msisdn', hint: 'Navigation' },
   { id: 'services', label: 'Services VAS', path: '/services', hint: 'Navigation' },
+  { id: 'revenus', label: 'Revenus détaillés', path: '/revenus', hint: 'Navigation' },
+  { id: 'predictions', label: 'Prédictions IA', path: '/predictions', hint: 'Navigation' },
+  { id: 'etl-monitor', label: 'ETL Monitor', path: '/etl-monitor', hint: 'Navigation' },
+  { id: 'duplicates', label: 'Doublons CDR', path: '/duplicates', hint: 'Navigation' },
+  { id: 'audit-logs', label: 'Logs d\'audit', path: '/audit-logs', hint: 'Navigation' },
+  { id: 'data-coverage', label: 'Audit Couverture Données', path: '/data-coverage', hint: 'Navigation' },
   { id: 'notifications', label: 'Notifications', path: '/notifications', hint: 'Navigation' },
   { id: 'users', label: 'Utilisateurs', path: '/users', hint: 'Navigation' },
 ];
@@ -26,12 +32,37 @@ function Icon({ name }) {
 export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'light', onToggleTheme, onNavigate, unreadCount = 0, setUnreadCount, setSidebarUnread }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [services, setServices] = useState([]);
+
+  useEffect(() => {
+    import('../api/axios').then(({ default: api }) => {
+      api.get('/services').then(res => setServices(res.data)).catch(() => {});
+    });
+  }, []);
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return PAGES;
-    return PAGES.filter((p) => p.label.toLowerCase().includes(s));
-  }, [q]);
+    const serviceResults = services.map(svc => ({
+      id: `svc-${svc.id}`,
+      label: `${svc.nom_service} (${svc.keyword})`,
+      path: `/services?keyword=${svc.keyword}`,
+      hint: `Service VAS · ${svc.nom_fournisseur}`
+    }));
+
+    const actions = [
+      { id: 'act-export', label: 'Exporter les revenus (Excel)', path: '/revenus', hint: 'Action' },
+      { id: 'act-duplicates', label: 'Nettoyer les doublons CDR', path: '/duplicates', hint: 'Action' },
+      { id: 'act-etl', label: 'Forcer import ETL', path: '/etl-monitor', hint: 'Action' },
+      { id: 'act-predict', label: 'Recalculer Prédictions IA', path: '/predictions', hint: 'Action' },
+    ];
+
+    const all = [...PAGES, ...serviceResults, ...actions];
+    if (!s) return all;
+    return all.filter((p) => 
+      p.label.toLowerCase().includes(s) || 
+      (p.hint && p.hint.toLowerCase().includes(s))
+    );
+  }, [q, services]);
 
   useEffect(() => {
     const onKeyDown = (e) => {

@@ -8,6 +8,7 @@ import {
   RadialBarChart, RadialBar,
 } from 'recharts';
 import { formatDT, formatCompactNumber } from '../lib/format';
+import JobStatusBar from '../components/JobStatusBar';
 
 const C_HISTO = '#3b82f6';
 const C_PRED = '#f59e0b';
@@ -117,6 +118,64 @@ function VolatilityBadge({ vol }) {
   return <span className={'badge ' + cls}>{label}</span>;
 }
 
+function ProviderBadge({ provider, model, fromCache, cachedAt }) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getMinutesAgo = (date) => {
+    if (!date) return 0;
+    const diff = now - new Date(date);
+    return Math.max(0, Math.round(diff / 60000));
+  };
+
+  const badgeStyle = {
+    borderRadius: '999px',
+    padding: '3px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px'
+  };
+
+  let content = null;
+
+  if (provider === 'groq') {
+    content = (
+      <span style={{ ...badgeStyle, background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--border)' }}>
+        ⚡ Groq AI · {model}
+      </span>
+    );
+  } else if (provider === 'gemini') {
+    content = (
+      <span style={{ ...badgeStyle, background: 'rgba(22,163,74,0.1)', color: 'var(--success)', border: '1px solid rgba(22,163,74,0.2)' }}>
+        ✦ Gemini Flash
+      </span>
+    );
+  } else if (provider === 'php_fallback') {
+    content = (
+      <span style={{ ...badgeStyle, background: 'rgba(217,119,6,0.1)', color: 'var(--warning)', border: '1px solid rgba(217,119,6,0.2)' }}>
+        ⚠ Calcul statistique
+      </span>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {content}
+      {fromCache && (
+        <span style={{ color: '#94a3b8', fontSize: '11px' }}>
+          · Depuis le cache · Actualisé il y a {getMinutesAgo(cachedAt)}min
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Accordion({ title, icon, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -171,25 +230,67 @@ export default function Predictions() {
   const [horizon, setHorizon] = useState(7);
   const [keywordFilter, setKeywordFilter] = useState('');
   const [source, setSource] = useState('groq');
+  const [aiProvider, setAiProvider] = useState('groq');
+  const [aiModel, setAiModel] = useState(null);
+  const [providerInfo, setProviderInfo] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isManualRefresh = false) => {
     setLoading(true); setError('');
     try {
+      if (isManualRefresh) {
+        await api.delete(`/predictions/cache?horizon=${horizon}${keywordFilter ? '&keyword=' + encodeURIComponent(keywordFilter) : ''}`);
+      }
+
       const [predRes, svcRes] = await Promise.allSettled([
         api.get('/predictions/revenus?horizon=' + horizon + (keywordFilter ? '&keyword=' + encodeURIComponent(keywordFilter) : '')),
         api.get('/services'),
       ]);
+
       if (predRes.status === 'fulfilled') {
-        setData(predRes.value.data);
-        setSource(predRes.value.data.source || 'groq');
+        const resData = predRes.value.data;
+        setData(resData);
+        setSource(resData.source || resData.ai_provider || 'groq');
+        setAiProvider(resData.ai_provider || resData.source || 'groq');
+        setAiModel(resData.ai_model || null);
         setLastUpdated(new Date());
-      } else { setError('Erreur chargement predictions'); }
-      if (svcRes.status === 'fulfilled') { setServices(svcRes.value.data || []); }
-    } catch (err) { setError('Erreur chargement API'); }
-    finally { setLoading(false); }
+
+        // Mise à jour de providerInfo pour badge stable
+        if (resData && !resData.cache_hit) {
+          setProviderInfo({
+            provider: resData.ai_provider,
+            model: resData.ai_model,
+            loadedAt: new Date(),
+            fromCache: false
+          });
+        } else if (resData && resData.cache_hit && (!providerInfo || isManualRefresh)) {
+          setProviderInfo({
+            provider: resData.provider_original ?? resData.ai_provider,
+            model: resData.ai_model,
+            loadedAt: new Date(resData.cached_at),
+            fromCache: true,
+          });
+        }
+      } else { 
+        setError('Erreur chargement predictions'); 
+      }
+
+      if (svcRes.status === 'fulfilled') { 
+        setServices(svcRes.value.data || []); 
+      }
+    } catch (err) { 
+      setError('Erreur chargement API'); 
+    } finally { 
+      setLoading(false); 
+    }
+  }, [horizon, keywordFilter, providerInfo]);
+
+  useEffect(() => { 
+    load(); 
   }, [horizon, keywordFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  const handleRefresh = () => {
+    load(true);
+  };
 
   const chartData = useMemo(() => {
     if (!data) return [];
@@ -213,7 +314,7 @@ export default function Predictions() {
   const analyse = data?.analyse_detaillee || {};
   const recommandations = data?.recommandations || [];
   const predServices = data?.predictions_par_service || [];
-  const isFallback = source === 'fallback';
+  const isFallback = source === 'fallback' || source === 'php_fallback';
 
   const kpiCards = [
     { title: 'Revenu predit demain', value: predictions[0] ? formatDT(predictions[0].revenus_predit) : '—', sub: predictions[0] ? <TrendIcon trend={predictions[0].tendance} variation={predictions[0].variation_pct} /> : null, color: '#3b82f6' },
@@ -281,10 +382,17 @@ export default function Predictions() {
               <h1 className="page-title" style={{ margin: 0 }}>Predictions IA</h1>
               <ReliabilityBadge score={score} />
               {isFallback && <span className="badge badge-warn">Fallback</span>}
+              {providerInfo && (
+                <ProviderBadge 
+                  provider={providerInfo.provider} 
+                  model={providerInfo.model} 
+                  fromCache={providerInfo.fromCache}
+                  cachedAt={providerInfo.loadedAt}
+                />
+              )}
             </div>
             <p className="page-subtitle" style={{ margin: 0 }}>
               Prediction IA &middot; Indicatif seulement
-              {data?.cache?.cache_hit && <span style={{ marginLeft: 8, color: 'var(--text-muted)', fontSize: '0.78rem' }}>&middot; Cache actif</span>}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -293,7 +401,7 @@ export default function Predictions() {
                 Maj il y a {Math.max(1, Math.round((Date.now() - lastUpdated) / 60000))} min
               </span>
             )}
-            <button className="btn btn-soft" onClick={load} disabled={loading}>
+            <button className="btn btn-soft" onClick={handleRefresh} disabled={loading}>
               {loading ? '...' : '↻ Refresh'}
             </button>
           </div>
@@ -322,6 +430,23 @@ export default function Predictions() {
           </div>
         </div>
       </FadeSection>
+
+      {/* ETL Timeline */}
+      <JobStatusBar
+        mode="timeline"
+        jobTypes={[
+          'prediction_data_collect',
+          'prediction_metrics_calc',
+          'prediction_groq_call',
+          'prediction_cache_save'
+        ]}
+        steps={[
+          { jobName: 'prediction_data_collect', label: 'Collecte données historiques' },
+          { jobName: 'prediction_metrics_calc', label: 'Calcul métriques & tendances' },
+          { jobName: 'prediction_groq_call', label: 'Analyse IA Groq' },
+          { jobName: 'prediction_cache_save', label: 'Mise en cache résultats' },
+        ]}
+      />
 
       {/* KPI CARDS */}
       <FadeSection>
@@ -385,8 +510,8 @@ export default function Predictions() {
                 const isBest = resume.meilleur_jour?.date === p.date;
                 const isWorst = resume.pire_jour?.date === p.date;
                 let rowBg = 'transparent';
-                if (isBest) rowBg = 'rgba(22,163,74,0.08)';
-                if (isWorst) rowBg = 'rgba(220,38,38,0.08)';
+                if (isBest) rowBg = 'rgba(22,163,74,0.12)';
+                if (isWorst) rowBg = 'rgba(220,38,38,0.12)';
                 return (
                   <tr key={p.date} style={{ background: rowBg, transition: 'background 0.2s' }}>
                     <td data-label="Date" style={{ padding: '0.65rem 0.85rem', fontFamily: 'monospace', fontSize: '0.82rem' }}>{p.date}</td>
@@ -514,7 +639,7 @@ export default function Predictions() {
       <FadeSection>
         <Accordion title="Methodologie & Avertissement" icon="📋">
           <p style={{ margin: '0 0 0.75rem' }}>{data?.methodologie || 'Analyse basee sur les tendances historiques.'}</p>
-          <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+          <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
             ⚠️ Les predictions sont indicatives et basees sur l historique disponible. Elles ne constituent pas une garantie de performance future.
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

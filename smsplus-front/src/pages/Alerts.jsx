@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import Modal from '../components/Modal';
+import JobStatusBar from '../components/JobStatusBar';
 
 const emptyAlertForm = () => ({
   start_date: new Date().toISOString().slice(0, 10),
@@ -195,6 +196,14 @@ export default function Alerts() {
         </div>
       </div>
 
+      {/* ETL Monitoring */}
+      <JobStatusBar
+        jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'notifications_polling']}
+        title="Traitements alertes"
+        compact={true}
+        refreshInterval={10000}
+      />
+
       {msg && (
         <div
           style={{
@@ -376,7 +385,7 @@ export default function Alerts() {
                         {Number.isFinite(it.avg_prev_7d) ? it.avg_prev_7d.toFixed(1) : '—'}
                       </td>
                       <td style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border)', color: isFlag ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 800 }}>
-                        {pct == null ? '∞' : `${pct.toFixed(1)}%`}
+                        {pct == null ? '∞' : `${Number(pct).toFixed(1)}%`}
                       </td>
                       <td style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border)' }}>
                         <span className={`badge ${isFlag ? 'badge-danger' : 'badge-ok'}`}>

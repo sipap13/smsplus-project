@@ -19,6 +19,9 @@ const pageTitles = {
   '/imports': 'Import de Données',
   '/users': 'Utilisateurs',
   '/etl-monitor': 'ETL Monitor',
+  '/duplicates': 'Doublons CDR',
+  '/audit-logs': 'Logs d\'audit',
+  '/data-coverage': 'Audit Couverture Données',
 };
 
 export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCount, setSidebarUnread }) {
@@ -54,6 +57,9 @@ export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCou
     if (p.startsWith('/imports')) return 'imports';
     if (p.startsWith('/users')) return 'users';
     if (p.startsWith('/etl-monitor')) return 'etl-monitor';
+    if (p.startsWith('/duplicates')) return 'duplicates';
+    if (p.startsWith('/audit-logs')) return 'audit-logs';
+    if (p.startsWith('/data-coverage')) return 'data-coverage';
     return 'dashboard';
   })();
 
@@ -81,6 +87,9 @@ export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCou
               imports: '/imports',
               users: '/users',
               'etl-monitor': '/etl-monitor',
+              duplicates: '/duplicates',
+              'audit-logs': '/audit-logs',
+              'data-coverage': '/data-coverage',
             };
             navigate(map[id] || '/dashboard');
           }}

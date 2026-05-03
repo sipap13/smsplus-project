@@ -46,6 +46,16 @@ function SidebarIcon({ name }) {
       <svg {...common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
     );
   }
+  if (name === 'duplicates') {
+    return (
+      <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>
+    );
+  }
+  if (name === 'audit') {
+    return (
+      <svg {...common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><circle cx="12" cy="12" r="3" /></svg>
+    );
+  }
   return <svg {...common}><circle cx="12" cy="12" r="8" /></svg>;
 }
 
@@ -57,14 +67,17 @@ export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 
   const menuItems = [
     { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard', show: true },
     { id: 'services', label: 'Services VAS', icon: 'services', show: isAdmin || isOp },
-    { id: 'msisdn', label: 'Recherche MSISDN', icon: 'services', show: isOp },
-    { id: 'cdr-occ', label: 'CDR OCC', icon: 'cdr', show: isBuss || isOp },
-    { id: 'cdr-mmg', label: 'CDR MMG', icon: 'cdr', show: isOp },
-    { id: 'revenus', label: 'Revenus détaillés', icon: 'dashboard', show: isBuss },
+    { id: 'msisdn', label: 'Recherche MSISDN', icon: 'services', show: isOp || isAdmin },
+    { id: 'cdr-occ', label: 'CDR OCC', icon: 'cdr', show: isBuss || isAdmin },
+    { id: 'cdr-mmg', label: 'CDR MMG', icon: 'cdr', show: isOp || isAdmin },
+    { id: 'revenus', label: 'Revenus détaillés', icon: 'dashboard', show: isBuss || isAdmin },
     { id: 'alerts', label: 'Alertes fraude', icon: 'fraud', show: isOp || isAdmin },
-    { id: 'predictions', label: 'Prédictions IA', icon: 'predictions', show: isAdmin || isBuss },
+    { id: 'duplicates', label: 'Doublons CDR', icon: 'duplicates', show: isOp || isAdmin },
+    { id: 'predictions', label: 'Prédictions IA', icon: 'predictions', show: isBuss || isAdmin },
     { id: 'imports', label: 'Import Données', icon: 'import', show: isAdmin },
     { id: 'users', label: 'Utilisateurs', icon: 'users', show: isAdmin },
+    { id: 'audit-logs', label: 'Logs d\'audit', icon: 'audit', show: isAdmin },
+    { id: 'data-coverage', label: 'Couverture Données', icon: 'fraud', show: isAdmin || isBuss },
   ];
 
   return (
@@ -90,9 +103,14 @@ export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 
         </button>
       ))}
 
-      <div className="sidebar-role-badge">
-        <div style={{ fontSize: '0.7rem', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Role</div>
-        <div style={{ color: '#ffffff', fontWeight: 700 }}>{user.role.replace('_', ' ')}</div>
+      <div className="sidebar-role-badge" style={{ 
+        background: 'rgba(11, 102, 195, 0.08)', 
+        border: '1px solid rgba(11, 102, 195, 0.2)',
+        margin: '1.5rem 0.8rem 0',
+        padding: '0.85rem'
+      }}>
+        <div style={{ fontSize: '0.62rem', marginBottom: '0.2rem', textTransform: 'uppercase', color: 'var(--primary)', opacity: 0.7, fontWeight: 700 }}>Privilèges</div>
+        <div style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.88rem', letterSpacing: '0.02em' }}>{user.role.replace('_', ' ')}</div>
       </div>
     </div>
   );

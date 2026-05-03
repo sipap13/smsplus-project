@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\EtlMonitorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CdrController extends Controller
 {
@@ -14,6 +16,10 @@ class CdrController extends Controller
     private const PER_PAGE_MAX = 50;
 
     private const MSISDN_RESULT_LIMIT = 2000;
+
+    public function __construct(
+        protected EtlMonitorService $monitor,
+    ) {}
 
     /** Colonnes retournées (lecture seule, pas d’id lourd si non demandé — on garde id pour stabilité UI). */
     private const OCC_SELECT = [
@@ -109,6 +115,19 @@ class CdrController extends Controller
 
     public function occ(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'cdr_occ_paginate',
+                'systeme',
+                null,
+                0,
+                ['page' => 'CDR OCC', 'triggered_by' => 'user', 'filters' => $request->only(['start_date','keyword','subscriber_type','partner'])]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for cdr_occ_paginate', ['error' => $e->getMessage()]);
+        }
+
         $perPage = (int) $request->query('per_page', self::PER_PAGE_DEFAULT);
         $perPage = max(1, min($perPage, self::PER_PAGE_MAX));
         $page = max(1, (int) $request->query('page', 1));
@@ -127,6 +146,21 @@ class CdrController extends Controller
             ->forPage($page, $perPage)
             ->get(self::OCC_SELECT);
 
+        $activeFilters = count(array_filter($request->only(['start_date','keyword','subscriber_type','partner'])));
+        
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_resultats' => $total,
+                    'page_courante' => $page,
+                    'filtres_actifs' => $activeFilters,
+                    'total_charge' => $totalCharge,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for cdr_occ_paginate', ['error' => $e->getMessage()]);
+        }
+
         return response()->json([
             'data'                 => $data,
             'total'                => $total,
@@ -139,6 +173,19 @@ class CdrController extends Controller
 
     public function mmg(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'cdr_mmg_paginate',
+                'systeme',
+                null,
+                0,
+                ['page' => 'CDR MMG', 'triggered_by' => 'user']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for cdr_mmg_paginate', ['error' => $e->getMessage()]);
+        }
+
         $perPage = (int) $request->query('per_page', self::PER_PAGE_DEFAULT);
         $perPage = max(1, min($perPage, self::PER_PAGE_MAX));
         $page = max(1, (int) $request->query('page', 1));
@@ -155,6 +202,17 @@ class CdrController extends Controller
             ->orderByDesc('id')
             ->forPage($page, $perPage)
             ->get(self::MMG_SELECT);
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'nb_resultats' => $total,
+                    'page_courante' => $page,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for cdr_mmg_paginate', ['error' => $e->getMessage()]);
+        }
 
         return response()->json([
             'data'         => $data,
@@ -222,8 +280,28 @@ class CdrController extends Controller
 
     public function byMsisdn(string $msisdn)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'msisdn_search_all',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Recherche MSISDN', 'msisdn' => $msisdn]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for msisdn_search_all', ['error' => $e->getMessage()]);
+        }
+
         $norm = $this->normalizeMsisdn($msisdn);
         if (strlen($norm) < 5 || strlen($norm) > 32) {
+            try {
+                if ($jobId) {
+                    $this->monitor->failJob($jobId, 'MSISDN invalide');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService failJob failed for msisdn_search_all', ['error' => $e->getMessage()]);
+            }
             return response()->json(['message' => 'MSISDN invalide'], 422);
         }
 
@@ -249,6 +327,20 @@ class CdrController extends Controller
             ->limit($limit)
             ->get(self::MMG_SELECT);
 
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'msisdn' => $norm,
+                    'occ_total' => $occTotal,
+                    'mmg_total' => $mmgTotal,
+                    'occ_shown' => $occ->count(),
+                    'mmg_shown' => $mmg->count(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for msisdn_search_all', ['error' => $e->getMessage()]);
+        }
+
         return response()->json([
             'occ'              => $occ,
             'mmg'              => $mmg,
@@ -264,8 +356,28 @@ class CdrController extends Controller
 
     public function timeline(string $msisdn, Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'msisdn_timeline_build',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Recherche MSISDN', 'msisdn' => $msisdn]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for msisdn_timeline_build', ['error' => $e->getMessage()]);
+        }
+
         $norm = $this->normalizeMsisdn($msisdn);
         if (strlen($norm) < 5 || strlen($norm) > 32) {
+            try {
+                if ($jobId) {
+                    $this->monitor->failJob($jobId, 'MSISDN invalide');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService failJob failed for msisdn_timeline_build', ['error' => $e->getMessage()]);
+            }
             return response()->json(['message' => 'MSISDN invalide'], 422);
         }
 
@@ -409,6 +521,19 @@ class CdrController extends Controller
                     'jours'  => $diff - 1,
                 ];
             }
+        }
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'msisdn' => $norm,
+                    'total_transactions' => count($items),
+                    'periode_jours' => count($sortedDates),
+                    'services_utilises' => count($servicesUtilises),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for msisdn_timeline_build', ['error' => $e->getMessage()]);
         }
 
         return response()->json([

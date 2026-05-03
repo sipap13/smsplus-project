@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\TwoFactorMail;
+use App\Services\EtlMonitorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,11 @@ class AuthController extends Controller
     private const CODE_LENGTH = 6;
 
     private const CODE_TTL_MINUTES = 10;
+
+    public function __construct(
+        protected EtlMonitorService $monitor,
+        protected \App\Services\AuditLogService $auditLog,
+    ) {}
 
     /* ───────────────────────────────
        Helper : générer un code aléatoire
@@ -86,23 +92,26 @@ class AuthController extends Controller
         return 'login_rate_'.md5($request->ip());
     }
 
-    /* ───────────────────────────────
-       Helper : envoi SMS (placeholder)
-       ─────────────────────────────── */
-    private function sendSms(string $phone, string $code): bool
-    {
-        // TODO: Intégrer Twilio / SMS Provider tunisien
-        // Pour l'instant on log simule l'envoi
-        Log::info("[SMS 2FA] Code {$code} envoyé au {$phone}");
-
-        return true;
-    }
+    /* SMS 2FA désactivé par l'utilisateur */
 
     /* ───────────────────────────────
        ÉTAPE 1 — login()
        ─────────────────────────────── */
     public function login(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'user_login',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Login', 'email' => $request->email, 'triggered_by' => 'user']
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for user_login', ['error' => $e->getMessage()]);
+        }
+
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
@@ -111,6 +120,13 @@ class AuthController extends Controller
         // Rate limiting par IP (5 tentatives / heure)
         $rateKey = $this->rateLimitKey($request);
         if (Cache::has($rateKey) && Cache::get($rateKey) >= 5) {
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Rate limit exceeded');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
+            }
             return response()->json(['message' => 'Trop de tentatives. Réessayez dans une heure.'], 429);
         }
 
@@ -124,12 +140,36 @@ class AuthController extends Controller
             Cache::put($rateKey, Cache::get($rateKey, 1), now()->addHour());
             $this->logAttempt($user ?? null, 'failed_credentials', $request, 'Email ou mot de passe incorrect');
 
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Email ou mot de passe incorrect');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
+            }
+
+            $this->auditLog->log('login_failed', 'auth', "Échec connexion : Email ou mot de passe incorrect pour {$request->email}", [], [], 'echec');
             return response()->json(['message' => 'Email ou mot de passe incorrect'], 401);
         }
 
         // Si 2FA désactivé pour cet utilisateur → connexion directe (fallback)
         if (! $user->two_fa_enabled) {
-            return $this->issueTokenAndRespond($user, $request);
+            $result = $this->issueTokenAndRespond($user, $request);
+            
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'success', null, [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'role' => $user->role,
+                        'no_2fa' => true,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
+            }
+            
+            return $result;
         }
 
         // Vérifier si l'utilisateur est bloqué
@@ -138,19 +178,20 @@ class AuthController extends Controller
             $minutes = now()->diffInMinutes($remaining, false);
             $minutes = abs((int) $minutes);
 
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Utilisateur bloqué');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
+            }
+
             return response()->json([
                 'message' => "Trop de tentatives, réessayez dans {$minutes} min",
             ], 429);
         }
 
-        // Déterminer la méthode 2FA
-        $method = $user->two_fa_method ?? 'email';
-        $hasPhone = ! empty($user->numero_personnel);
-
-        // Si méthode SMS mais pas de téléphone → fallback email
-        if (($method === 'sms' || $method === 'both') && ! $hasPhone) {
-            $method = 'email';
-        }
+        $method = 'email';
 
         // Générer le code
         $code = $this->generateCode();
@@ -168,19 +209,38 @@ class AuthController extends Controller
             } catch (\Exception $e) {
                 Log::error('Erreur envoi email 2FA: '.$e->getMessage());
 
+                try {
+                    if ($jobId) {
+                        $this->monitor->finishJob($jobId, 'failed', 'Erreur envoi email 2FA');
+                    }
+                } catch (\Exception $e2) {
+                    Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e2->getMessage()]);
+                }
+
                 return response()->json(['message' => 'Erreur lors de l\'envoi du code. Réessayez.'], 500);
             }
         }
 
-        // Envoi SMS (log pour l'instant)
-        if ($method === 'sms' || $method === 'both') {
-            $this->sendSms($user->numero_personnel, $code);
-        }
+        // Envoi SMS désactivé
 
         // Reset compteurs de tentatives
         Cache::forget($this->attemptsKey($user->email));
 
         $this->logAttempt($user, 'resend', $request, "Code 2FA envoyé par {$method}");
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    '2fa_method' => $method,
+                    'requires_2fa' => true,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
+        }
 
         // Préparer la réponse avec choix de méthode
         $response = [
@@ -191,11 +251,6 @@ class AuthController extends Controller
             'method' => $method,
         ];
 
-        if ($hasPhone && ($method === 'email' || $method === 'sms')) {
-            $response['available_methods'] = ['email', 'sms'];
-            $response['phone'] = $this->maskPhone($user->numero_personnel);
-        }
-
         return response()->json($response);
     }
 
@@ -204,6 +259,19 @@ class AuthController extends Controller
        ─────────────────────────────── */
     public function verifyTwoFa(Request $request)
     {
+        $jobId = null;
+        try {
+            $jobId = $this->monitor->startJob(
+                'user_2fa_verify',
+                'systeme',
+                null,
+                0,
+                ['page' => 'Login', 'email' => $request->email]
+            );
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService startJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+        }
+
         $request->validate([
             'email' => 'required|email',
             'code' => 'required|string|size:6',
@@ -217,6 +285,14 @@ class AuthController extends Controller
             $remaining = Cache::get($this->blockKey($email));
             $minutes = abs((int) now()->diffInMinutes($remaining, false));
 
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Utilisateur bloqué');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+            }
+
             return response()->json([
                 'message' => "Trop de tentatives, réessayez dans {$minutes} min",
             ], 429);
@@ -228,12 +304,27 @@ class AuthController extends Controller
             ->first();
 
         if (! $user) {
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Utilisateur introuvable');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+            }
             return response()->json(['message' => 'Utilisateur introuvable'], 404);
         }
 
         // Vérifier expiration
         if (empty($user->two_fa_code) || empty($user->two_fa_expires_at) || now()->gt($user->two_fa_expires_at)) {
             $this->logAttempt($user, 'failed_2fa', $request, 'Code expiré');
+
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', 'Code expiré');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+            }
 
             return response()->json([
                 'message' => 'Code expiré, demandez un nouveau code',
@@ -255,12 +346,30 @@ class AuthController extends Controller
                 Cache::put($this->blockKey($email), now()->addMinutes(self::BLOCK_DURATION_MINUTES), now()->addMinutes(self::BLOCK_DURATION_MINUTES));
                 Cache::forget($attemptsKey);
 
+                try {
+                    if ($jobId) {
+                        $this->monitor->finishJob($jobId, 'failed', 'Trop de tentatives');
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('EtlMonitorService finishJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+                }
+
                 return response()->json([
                     'message' => 'Trop de tentatives, réessayez dans '.self::BLOCK_DURATION_MINUTES.' min',
                     'blocked' => true,
                     'blocked_until_minutes' => self::BLOCK_DURATION_MINUTES,
                 ], 429);
             }
+
+            try {
+                if ($jobId) {
+                    $this->monitor->finishJob($jobId, 'failed', "Code invalide - tentative {$attempts}");
+                }
+            } catch (\Exception $e) {
+                Log::warning('EtlMonitorService finishJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+            }
+
+            $this->auditLog->log('2fa_failed', 'auth', "Code invalide pour {$email} — tentative {$attempts}/".self::MAX_2FA_ATTEMPTS, [], [], 'echec');
 
             return response()->json([
                 'message' => "Code invalide, {$remaining} tentatives restantes",
@@ -272,7 +381,22 @@ class AuthController extends Controller
         Cache::forget($this->attemptsKey($email));
         Cache::forget($this->blockKey($email));
 
-        return $this->issueTokenAndRespond($user, $request);
+        $result = $this->issueTokenAndRespond($user, $request);
+
+        try {
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EtlMonitorService finishJob failed for user_2fa_verify', ['error' => $e->getMessage()]);
+        }
+
+        $this->auditLog->log('2fa_success', 'auth', "Vérification 2FA réussie pour {$user->email}");
+        return $result;
     }
 
     /* ───────────────────────────────
@@ -303,11 +427,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Utilisateur introuvable'], 404);
         }
 
-        $method = $user->two_fa_method ?? 'email';
-        $hasPhone = ! empty($user->numero_personnel);
-        if (($method === 'sms' || $method === 'both') && ! $hasPhone) {
-            $method = 'email';
-        }
+        $method = 'email';
 
         $code = $this->generateCode();
 
@@ -327,9 +447,7 @@ class AuthController extends Controller
             }
         }
 
-        if ($method === 'sms' || $method === 'both') {
-            $this->sendSms($user->numero_personnel, $code);
-        }
+        // Envoi SMS désactivé
 
         Cache::increment($resendKey);
         Cache::put($resendKey, Cache::get($resendKey, 1), now()->addHour());
@@ -345,10 +463,6 @@ class AuthController extends Controller
             'message' => 'Nouveau code envoyé',
             'method' => $method,
         ];
-
-        if ($hasPhone && ($method === 'email' || $method === 'sms')) {
-            $response['phone'] = $this->maskPhone($user->numero_personnel);
-        }
 
         return response()->json($response);
     }
@@ -377,6 +491,7 @@ class AuthController extends Controller
             'updated_at' => now(),
         ]);
 
+        $this->auditLog->log('login', 'auth', "Connexion réussie pour {$user->email}");
         $this->logAttempt($user, 'success', $request, 'Connexion réussie');
 
         return response()->json([
@@ -416,6 +531,11 @@ class AuthController extends Controller
 
         if ($token) {
             DB::table('ra_t_api_tokens')->where('token_hash', hash('sha256', $token))->delete();
+        }
+
+        $user = $request->attributes->get('auth_user');
+        if ($user) {
+            $this->auditLog->log('logout', 'auth', "Déconnexion de {$user->email}");
         }
 
         return response()->json(['message' => 'Déconnecté avec succès']);
