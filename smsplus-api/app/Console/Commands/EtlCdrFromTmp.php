@@ -71,10 +71,10 @@ class EtlCdrFromTmp extends Command
             $totalInserted = $totals['mmg']['inserted'] + $totals['occ']['inserted'];
             $totalSkipped = $totals['mmg']['skipped'] + $totals['occ']['skipped'];
 
-            $monitor->finishJob($job, [
-                'rows_processed' => $totalProcessed,
-                'rows_inserted' => $totalInserted,
-                'rows_skipped' => $totalSkipped,
+            $monitor->finishJob($job, 'success', null, [
+                'processed_rows' => $totalInserted,
+                'total_rows' => $totalProcessed,
+                'error_rows' => $totalSkipped,
             ]);
 
             return self::SUCCESS;
@@ -88,73 +88,92 @@ class EtlCdrFromTmp extends Command
     private function etlMmg(int $chunk, bool $dryRun, array &$stats): void
     {
         if (! $this->tableExists('ra_t_tmp_mmg')) {
-            $this->warn('Table ra_t_tmp_mmg introuvable. Lance les migrations puis charge les données brutes.');
+            $this->warn('Table ra_t_tmp_mmg introuvable.');
             return;
         }
 
-        $q = DB::table('ra_t_tmp_mmg')
-            ->where('event_status', '=', 'Success');
+        $count = (int) DB::table('ra_t_tmp_mmg')->where('event_status', '=', 'Success')->count();
+        $stats['processed'] = $count;
+        $this->info("MMG candidates: {$count}");
 
-        $q->orderBy('id')->chunkById($chunk, function ($rows) use ($dryRun, &$stats) {
-            $stats['processed'] += count($rows);
-            $batch = [];
-            foreach ($rows as $r) {
-                $mapped = $this->mapMmgRow($r);
-                if ($mapped === null) {
-                    $stats['skipped']++;
-                    continue;
-                }
-                $batch[] = $mapped;
-            }
+        if ($dryRun || $count === 0) {
+            $stats['inserted'] = $count;
+            return;
+        }
 
-            if ($batch === []) {
-                return;
-            }
+        DB::statement("
+            INSERT INTO ra_t_mmg_cdr_det (ne, a_msisdn, b_msisdn, start_date, start_hour, event_type, event_type_orig, call_type, event_status, subscriber_type, service_type, orig_start_time, created_at, updated_at)
+            SELECT
+                NULLIF(TRIM(ne), '') as ne,
+                NULLIF(TRIM(a_msisdn), '') as a_msisdn,
+                NULLIF(TRIM(b_msisdn), '') as b_msisdn,
+                to_date(substring(regexp_replace(proc_date, '\D', '', 'g') from 1 for 8), 'YYYYMMDD') as start_date,
+                CASE WHEN proc_hour ~ '^[0-9]+$' AND proc_hour::int BETWEEN 0 AND 23 THEN proc_hour::int ELSE NULL END as start_hour,
+                NULLIF(TRIM(event_type), '') as event_type,
+                NULLIF(TRIM(event_type_orig), '') as event_type_orig,
+                NULLIF(TRIM(call_type), '') as call_type,
+                NULLIF(TRIM(event_status), '') as event_status,
+                NULLIF(TRIM(subscriber_type), '') as subscriber_type,
+                NULLIF(TRIM(service_type), '') as service_type,
+                NULLIF(TRIM(orig_start_time), '') as orig_start_time,
+                NOW(), NOW()
+            FROM ra_t_tmp_mmg
+            WHERE event_status = 'Success'
+              AND NULLIF(TRIM(a_msisdn), '') IS NOT NULL
+              AND to_date(substring(regexp_replace(proc_date, '\D', '', 'g') from 1 for 8), 'YYYYMMDD') IS NOT NULL
+        ");
 
-            if ($dryRun) {
-                $stats['inserted'] += count($batch);
-                return;
-            }
+        $this->info('Optimisation des statistiques MMG...');
+        DB::statement("VACUUM ANALYZE ra_t_mmg_cdr_det");
 
-            DB::table('ra_t_mmg_cdr_det')->insert($batch);
-            $stats['inserted'] += count($batch);
-        });
+        $stats['inserted'] = $count;
+        $this->info('MMG ETL: OK');
     }
 
     private function etlOcc(int $chunk, bool $dryRun, array &$stats): void
     {
         if (! $this->tableExists('ra_t_tmp_occ')) {
-            $this->warn('Table ra_t_tmp_occ introuvable. Lance les migrations puis charge les données brutes.');
+            $this->warn('Table ra_t_tmp_occ introuvable.');
             return;
         }
 
-        $q = DB::table('ra_t_tmp_occ')
-            ->where('filter_code', '=', 0);
+        $count = (int) DB::table('ra_t_tmp_occ')->where('filter_code', '=', 0)->count();
+        $stats['processed'] = $count;
+        $this->info("OCC candidates: {$count}");
 
-        $q->orderBy('id')->chunkById($chunk, function ($rows) use ($dryRun, &$stats) {
-            $stats['processed'] += count($rows);
-            $batch = [];
-            foreach ($rows as $r) {
-                $mapped = $this->mapOccRow($r);
-                if ($mapped === null) {
-                    $stats['skipped']++;
-                    continue;
-                }
-                $batch[] = $mapped;
-            }
+        if ($dryRun || $count === 0) {
+            $stats['inserted'] = $count;
+            return;
+        }
 
-            if ($batch === []) {
-                return;
-            }
+        DB::statement("
+            INSERT INTO ra_t_occ_cdr_detail (datasource, a_msisdn, b_msisdn, start_date, start_hour, call_type, event_type, subscriber_type, roaming_type, partner, charge_amount, keyword, orig_start_time, created_at, updated_at)
+            SELECT
+                NULLIF(TRIM(ne), 'OCC') as datasource,
+                NULLIF(TRIM(a_msisdn), '') as a_msisdn,
+                NULLIF(TRIM(b_msisdn), '') as b_msisdn,
+                to_date(substring(regexp_replace(proc_date, '\D', '', 'g') from 1 for 8), 'YYYYMMDD') as start_date,
+                CASE WHEN proc_hour ~ '^[0-9]+$' AND proc_hour::int BETWEEN 0 AND 23 THEN proc_hour::int ELSE NULL END as start_hour,
+                NULLIF(TRIM(call_type), '') as call_type,
+                NULLIF(TRIM(event_type), '') as event_type,
+                NULLIF(TRIM(subscriber_type), '') as subscriber_type,
+                NULL,
+                NULLIF(TRIM(partner), '') as partner,
+                COALESCE(NULLIF(regexp_replace(REPLACE(charge_amount_orig, ',', '.'), '\s', '', 'g'), ''), '0')::numeric(14,3) as charge_amount,
+                NULLIF(TRIM(b_msisdn), '') as keyword,
+                NULLIF(TRIM(orig_start_time), '') as orig_start_time,
+                NOW(), NOW()
+            FROM ra_t_tmp_occ
+            WHERE filter_code = 0
+              AND NULLIF(TRIM(a_msisdn), '') IS NOT NULL
+              AND to_date(substring(regexp_replace(proc_date, '\D', '', 'g') from 1 for 8), 'YYYYMMDD') IS NOT NULL
+        ");
 
-            if ($dryRun) {
-                $stats['inserted'] += count($batch);
-                return;
-            }
+        $this->info('Optimisation des statistiques OCC...');
+        DB::statement("VACUUM ANALYZE ra_t_occ_cdr_detail");
 
-            DB::table('ra_t_occ_cdr_detail')->insert($batch);
-            $stats['inserted'] += count($batch);
-        });
+        $stats['inserted'] = $count;
+        $this->info('OCC ETL: OK');
     }
 
     private function mapMmgRow(object $r): ?array

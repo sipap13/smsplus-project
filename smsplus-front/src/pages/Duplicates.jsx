@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
 import { formatDT } from '../lib/format';
+import useServiceMapping from '../hooks/useServiceMapping';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -80,9 +81,12 @@ export default function Duplicates() {
   const [dateDebut, setDateDebut] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [minOccurrences, setMinOccurrences] = useState(2);
   const [keyword, setKeyword] = useState('');
+  const [callType, setCallType] = useState('VAS');
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [report, setReport] = useState(null);
   const [showReport, setShowReport] = useState(false);
+
+  const { getNom, services: mappedServices } = useServiceMapping();
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true);
@@ -100,7 +104,7 @@ export default function Duplicates() {
     setLoading(true);
     try {
       const endpoint = source === 'occ' ? '/duplicates/occ' : '/duplicates/mmg';
-      const res = await api.get(`${endpoint}?date_debut=${dateDebut}&min_occurrences=${minOccurrences}&keyword=${keyword}`);
+      const res = await api.get(`${endpoint}?date_debut=${dateDebut}&min_occurrences=${minOccurrences}&keyword=${keyword}&call_type=${callType}`);
       setResults(res.data);
     } catch (err) {
       console.error("Failed to fetch duplicates", err);
@@ -246,10 +250,21 @@ export default function Duplicates() {
           <div className="field">
             <label className="field-label">Source des données</label>
             <select className="field-control" value={source} onChange={(e) => setSource(e.target.value)}>
-              <option value="occ">OCC (VAS)</option>
+              <option value="occ">OCC (Détail CDR)</option>
               <option value="mmg">MMG (SMS/Signaling)</option>
             </select>
           </div>
+          {source === 'occ' && (
+            <div className="field">
+              <label className="field-label">Type d'appel</label>
+              <select className="field-control" value={callType} onChange={(e) => setCallType(e.target.value)}>
+                <option value="VAS">VAS (SMS+)</option>
+                <option value="DATA">DATA (Internet)</option>
+                <option value="SMS">SMS (Classique)</option>
+                <option value="all">Tous les types</option>
+              </select>
+            </div>
+          )}
           <div className="field">
             <label className="field-label">Seuil occurrences (Min)</label>
             <select className="field-control" value={minOccurrences} onChange={(e) => setMinOccurrences(Number(e.target.value))}>
@@ -260,14 +275,13 @@ export default function Duplicates() {
             </select>
           </div>
           <div className="field">
-            <label className="field-label">Keyword (Optionnel)</label>
-            <input 
-              type="text" 
-              className="field-control" 
-              placeholder="Ex: SOS, FUN..." 
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-            />
+            <label className="field-label">Service (Optionnel)</label>
+            <select className="field-control" value={keyword} onChange={(e) => setKeyword(e.target.value)}>
+              <option value="">Tous les services</option>
+              {mappedServices.map(s => (
+                <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>
+              ))}
+            </select>
           </div>
           <div>
             <button className="btn btn-primary" style={{ width: '100%', height: '42px', fontWeight: 600 }} onClick={fetchResults}>
@@ -325,9 +339,14 @@ export default function Duplicates() {
                         </td>
                         <td className="mono" style={{ fontWeight: 600 }}>{row.a_msisdn}</td>
                         <td>
-                          <span className="badge" style={{ background: 'var(--bg-page)', color: 'var(--text-main)' }}>
-                            {row.keyword || row.service_type || '—'}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-main)' }}>
+                              {getNom(row.keyword || row.service_type)}
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                              {row.keyword || row.service_type || '—'}
+                            </span>
+                          </div>
                         </td>
                         <td>{row.start_date} <span style={{ color: 'var(--text-muted)' }}>{row.start_hour}h</span></td>
                         {source === 'occ' && <td>{formatDT(row.charge_amount)}</td>}
@@ -385,10 +404,10 @@ export default function Duplicates() {
           <div className="saas-surface" style={{ padding: '1.5rem', borderRadius: '16px', flex: 1 }}>
             <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem', fontWeight: 700 }}>Répartition par Service</h3>
             <div style={{ height: '220px' }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <PieChart>
                   <Pie
-                    data={stats?.top_services?.map((s, i) => ({ name: s.keyword || 'Inconnu', value: Number(s.count) })) || []}
+                    data={stats?.top_services?.map((s, i) => ({ name: getNom(s.keyword), value: Number(s.count) })) || []}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -410,7 +429,7 @@ export default function Duplicates() {
           <div className="saas-surface" style={{ padding: '1.5rem', borderRadius: '16px', flex: 1 }}>
             <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem', fontWeight: 700 }}>Doublons par Date</h3>
             <div style={{ height: '220px' }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={stats?.by_date || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis 

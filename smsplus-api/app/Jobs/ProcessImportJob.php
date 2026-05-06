@@ -313,7 +313,7 @@ class ProcessImportJob implements ShouldQueue
     private function maxBatchSize(string $type): int
     {
         if (DB::connection()->getDriverName() !== 'sqlite') {
-            return 2500;
+            return 5000;
         }
         $cols = $type === 'occ' ? 14 : 12;
 

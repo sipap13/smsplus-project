@@ -19,7 +19,12 @@ class AlertController extends Controller
 
     public function index()
     {
-        $alerts = DB::table('ra_t_alerts')->orderBy('start_date', 'desc')->orderBy('id', 'desc')->get();
+        $alerts = DB::table('ra_t_alerts as a')
+            ->leftJoin('ra_t_services as s', 'a.keyword', '=', 's.keyword')
+            ->select('a.*', 's.nom_service', 's.nom_fournisseur')
+            ->orderBy('a.start_date', 'desc')
+            ->orderBy('a.id', 'desc')
+            ->get();
 
         return response()->json($alerts);
     }

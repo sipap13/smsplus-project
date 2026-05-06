@@ -249,12 +249,36 @@ class ChatbotService
         ];
     }
 
+    /**
+     * Recupere la table de correspondance keyword <-> nom_service.
+     */
+    protected function fetchServiceMapping(): string
+    {
+        try {
+            $mappings = DB::table('ra_t_services')
+                ->select('keyword', 'nom_service', 'nom_fournisseur')
+                ->where('actif', true)
+                ->get();
+            
+            $text = "TABLE ra_t_services (MAPPING COMMERCIAL) :\n";
+            foreach ($mappings as $m) {
+                $text .= "- Nom: \"{$m->nom_service}\", Fournisseur: \"{$m->nom_fournisseur}\", Keyword/Technical: \"{$m->keyword}\"\n";
+            }
+            return $text;
+        } catch (Throwable) {
+            return "";
+        }
+    }
+
     protected function buildSqlPrompt(string $userRole): string
     {
         $enums = $this->fetchEnumValues();
+        $mapping = $this->fetchServiceMapping();
 
         $prompt = 'Tu es un assistant IA qui genere uniquement une requete SQL SELECT valide pour PostgreSQL. ';
         $prompt .= 'Ne fournis aucune explication. Reponds uniquement avec la requete SQL brute, sans bloc markdown. ';
+        $prompt .= "CONTEXTE COMMERCIAL DES SERVICES :\n$mapping\n";
+        $prompt .= "Si l'utilisateur demande un service par son nom commercial (ex: Shofha), utilise le Keyword technique correspondant (ex: mb1) dans la clause WHERE sur ra_t_occ_cdr_detail.keyword ou ra_t_mmg_cdr_det.service_type.\n";
         $prompt .= 'REGLES ABSOLUES sur les colonnes — respecte-les strictement ou la requete sera en erreur : ';
 
         // ── Table OCC (schema exact) ───────────────────────────────────────────

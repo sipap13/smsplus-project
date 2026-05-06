@@ -5,22 +5,23 @@ import {
   CartesianGrid, PieChart, Pie, Cell,
 } from 'recharts';
 import { formatCompactNumber, formatDT } from '../lib/format';
+import useServiceMapping from '../hooks/useServiceMapping';
 
 const COLORS = ['#1a237e', '#0288d1', '#00838f', '#2e7d32', '#e65100', '#6a1b9a'];
 
 export default function Revenus() {
   const [data, setData]       = useState([]);
-  const [services, setServices] = useState([]);
   const [loading, setLoading]  = useState(true);
   const [error, setError] = useState('');
   const [days, setDays] = useState(30);
   const [visibleRows, setVisibleRows] = useState(50);
-  const [includeData, setIncludeData] = useState(false); // inclure call_type=DATA
   const [view, setView] = useState('day'); // day | month
   const [monthly, setMonthly] = useState([]);
   const [top20, setTop20] = useState([]);
   const [byFournisseur, setByFournisseur] = useState([]);
   const [exporting, setExporting] = useState(false);
+
+  const { getNom, services: mappedServices } = useServiceMapping();
 
   useEffect(() => {
     setLoading(true);
@@ -30,18 +31,16 @@ export default function Revenus() {
     const load = async () => {
       try {
         const results = await Promise.allSettled([
-          api.get(`/dashboard/revenus?days=${days}&limit=5000&include_data=${includeData ? 1 : 0}`),
-          api.get(`/dashboard/revenus-monthly?months=12&include_data=${includeData ? 1 : 0}`),
-          api.get(`/dashboard/top-services?days=${days}&topN=20&include_data=${includeData ? 1 : 0}`),
-          api.get(`/dashboard/revenus-fournisseur?days=${days}&topN=20&include_data=${includeData ? 1 : 0}`),
-          api.get('/services'),
+          api.get(`/dashboard/revenus?days=${days}&limit=5000`),
+          api.get(`/dashboard/revenus-monthly?months=12`),
+          api.get(`/dashboard/top-services?days=${days}&topN=20`),
+          api.get(`/dashboard/revenus-fournisseur?days=${days}&topN=20`),
         ]);
 
         const revenusRes = results[0];
         const monthlyRes = results[1];
         const topRes = results[2];
         const fourRes = results[3];
-        const servicesRes = results[4];
 
         const revenus = revenusRes.status === 'fulfilled' ? (revenusRes.value.data || []) : [];
 
@@ -50,27 +49,23 @@ export default function Revenus() {
         setMonthly(monthlyRes.status === 'fulfilled' ? (monthlyRes.value.data || []) : []);
         setTop20(topRes.status === 'fulfilled' ? (topRes.value.data || []) : []);
         setByFournisseur(fourRes.status === 'fulfilled' ? (fourRes.value.data || []) : []);
-        setServices(servicesRes.status === 'fulfilled' ? (servicesRes.value.data || []) : []);
         setLoading(false);
       } catch {
         if (!mounted) return;
         setError("Impossible de charger les revenus. Verifie l'API.");
         setData([]);
-        setServices([]);
         setLoading(false);
       }
     };
 
     load();
     return () => { mounted = false; };
-  }, [days, includeData]);
+  }, [days]);
 
   // Group by keyword for pie chart
   const byKeyword = data.reduce((acc, row) => {
     const key = row.keyword || 'Autre';
-    const svc = services.find(s => s.keyword === key);
-    const defaultLabel = key === 'DATA' ? 'Trafic Data' : key;
-    const name = svc ? svc.nom_service : defaultLabel;
+    const name = getNom(key);
     if (!acc[name]) acc[name] = 0;
     acc[name] += parseFloat(row.total || 0);
     return acc;
@@ -79,11 +74,7 @@ export default function Revenus() {
   const pieData = Object.entries(byKeyword).map(([name, value]) => ({
     name, value: parseFloat(value.toFixed(3)),
   }));
-  const totalPie = pieData.reduce((sum, row) => sum + row.value, 0);
-  const dataPie = pieData.find((row) => row.name === 'Trafic Data')?.value || 0;
-  const hideDataInPie = !includeData && totalPie > 0 && (dataPie / totalPie) >= 0.95;
-  const filteredPieData = hideDataInPie ? pieData.filter((row) => row.name !== 'Trafic Data') : pieData;
-  const pieDataForChart = filteredPieData.length >= 2 ? filteredPieData : pieData;
+  const pieDataForChart = pieData;
 
   const isHourMode = false;
 
@@ -106,6 +97,40 @@ export default function Revenus() {
     .map(r => ({ ...r, total: parseFloat(r.total.toFixed(3)) }))
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload;
+      return (
+        <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b' }}>
+          <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {displayDate(label)}</div>
+          {d.is_outlier && <div style={{ color: '#fbbf24', fontSize: '11px', marginBottom: '4px' }}>⚠ Valeur exceptionnelle (z-score = {d.z_score})</div>}
+          {payload.map((p, i) => (
+            <div key={i} style={{ color: p.color || '#6366f1', display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
+              <span>{p.name}:</span>
+              <span style={{ fontWeight: 700 }}>{formatDT(p.value)}</span>
+            </div>
+          ))}
+          {d.is_outlier && <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>Plafonné à : {formatDT(d.valeur_capped)}</div>}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const renderCustomBar = (props) => {
+    const { x, y, width, height, is_outlier, fill } = props;
+    if (is_outlier) {
+      return (
+        <g>
+          <rect x={x} y={y} width={width} height={height} fill={fill} opacity={0.7} />
+          <line x1={x} y1={y} x2={x + width} y2={y} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 2" />
+          <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10} fill="#f59e0b">▲</text>
+        </g>
+      );
+    }
+    return <rect x={x} y={y} width={width} height={height} fill={fill} />;
+  };
+
   const displayDate = (raw) => {
     if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw || '—';
     const [y, m, d] = raw.split('-');
@@ -125,22 +150,20 @@ export default function Revenus() {
     try {
       setExporting(true);
       const rows = data.map((row) => {
-        const svc = services.find((s) => s.keyword === row.keyword);
         const dateLabel = row.start_date ? row.start_date : `${String(row.hour).padStart(2, '0')}:00`;
         return {
           date: dateLabel,
-          fournisseur: svc?.nom_fournisseur || '',
-          service: svc?.nom_service || '',
+          service: getNom(row.keyword),
           keyword: row.keyword || '',
           nb_cdr: row.nb_cdr || 0,
           revenus_dt: Number(row.total || 0).toFixed(3),
         };
       });
 
-      const header = ['date', 'fournisseur', 'service', 'keyword', 'nb_cdr', 'revenus_dt'];
+      const header = ['date', 'service', 'keyword', 'nb_cdr', 'revenus_dt'];
       const lines = [
         header.join(';'),
-        ...rows.map((r) => [r.date, r.fournisseur, r.service, r.keyword, r.nb_cdr, r.revenus_dt]
+        ...rows.map((r) => [r.date, r.service, r.keyword, r.nb_cdr, r.revenus_dt]
           .map((v) => `"${String(v).replaceAll('"', '""')}"`).join(';')),
       ];
       const csv = `\uFEFF${lines.join('\n')}`;
@@ -148,7 +171,7 @@ export default function Revenus() {
       const href = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = href;
-      a.download = `revenus_${days}j_${includeData ? 'with_data' : 'smsplus'}.csv`;
+      a.download = `revenus_${days}j_smsplus.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -172,14 +195,6 @@ export default function Revenus() {
         </div>
       </div>
       <div className="toolbar">
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-          <input
-            type="checkbox"
-            checked={includeData}
-            onChange={(e) => setIncludeData(e.target.checked)}
-          />
-          Inclure `DATA` (Trafic Data)
-        </label>
         <button
           type="button"
           onClick={exportCsv}
@@ -231,7 +246,7 @@ export default function Revenus() {
       <div className="kpi-grid-3" style={{ marginBottom: '1.2rem' }}>
         {[
           {
-            label: includeData ? 'Total Revenus (incl. Trafic Data)' : 'Total Revenus SMS+',
+            label: 'Total Revenus SMS+',
             value: formatDT(totalRevenus),
             color: '#1a237e',
             icon: 'RV',
@@ -262,16 +277,21 @@ export default function Revenus() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey={view === 'month' ? 'period' : 'date'} tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} />
-              <Tooltip formatter={(v) => [formatDT(v), 'Revenus']} />
-              <Bar dataKey="total" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Revenus (DT)" />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="valeur_capped" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Revenus (DT)" shape={renderCustomBar}>
+                {barData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : 'var(--primary)'} />
+                ))}
+              </Bar>
             </BarChart>
+
           </ResponsiveContainer>
         </div>
 
         {/* Pie chart by service */}
         <div className="saas-surface" style={{ padding: '1.5rem' }}>
           <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem' }}>
-            {hideDataInPie && pieDataForChart.length >= 2 ? 'Répartition par service (hors Trafic Data)' : 'Répartition par service'}
+            Répartition par service
           </h3>
           <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
             <PieChart>

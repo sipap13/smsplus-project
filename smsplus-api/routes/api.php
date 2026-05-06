@@ -54,13 +54,19 @@ Route::get('/dashboard/mmg-success-rate', [DashboardController::class, 'mmgSucce
 Route::get('/dashboard/etl-health', [DashboardController::class, 'etlHealth'])->middleware('auth.api');
 Route::get('/dashboard/billing-integrity', [DashboardController::class, 'billingIntegrity'])->middleware('auth.api');
 Route::get('/dashboard/repartition-roaming', [DashboardController::class, 'repartitionRoaming'])->middleware('auth.api');
+Route::get('/dashboard/revenus-partner', [DashboardController::class, 'revenusByPartner'])->middleware('auth.api');
+Route::get('/dashboard/download-report/{filename}', [DashboardController::class, 'downloadReport'])->middleware('auth.api');
 
 // ETL Monitoring
 Route::get('/etl/jobs/by-types', [EtlMonitorController::class, 'byTypes'])->middleware('auth.api');
 Route::get('/etl/stats', [EtlMonitorController::class, 'stats'])->middleware('auth.api');
+Route::get('/etl/lineage-stats', [EtlMonitorController::class, 'lineageStats'])->middleware('auth.api');
+Route::get('/etl/performance', [EtlMonitorController::class, 'performanceStats'])->middleware('auth.api');
 Route::get('/etl/jobs', [EtlMonitorController::class, 'index'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
+Route::post('/etl/trigger-agg', [EtlMonitorController::class, 'triggerAgg'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
 
 // Services : lecture pour tous les profils authentifiés (ex. dashboard) ; écriture réservée aux ADMIN
+Route::get('/services/mapping', [ServiceController::class, 'mapping'])->middleware('auth.api');
 Route::get('/services', [ServiceController::class, 'index'])->middleware('auth.api');
 Route::get('/services/{id}', [ServiceController::class, 'show'])->middleware('auth.api');
 Route::get('/services/{keyword}/diagnostic-alertes', [ServiceController::class, 'diagnosticAlertes'])->middleware('auth.api');

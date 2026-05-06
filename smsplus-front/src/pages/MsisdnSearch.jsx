@@ -1,10 +1,10 @@
-/* eslint-disable react/prop-types */
-
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import JobStatusBar from '../components/JobStatusBar';
 import { formatDT } from '../lib/format';
 import MsisdnTimeline from '../components/MsisdnTimeline';
+import useServiceMapping from '../hooks/useServiceMapping';
 
 const OCC_COLS = [
   { key: 'a_msisdn', label: 'A' },
@@ -31,15 +31,26 @@ const MMG_COLS = [
 ];
 
 export default function MsisdnSearch() {
-  const [msisdn, setMsisdn] = useState('');
+  const [searchParams] = useSearchParams();
+  const [msisdn, setMsisdn] = useState(searchParams.get('q') || '');
   const [reclamations, setReclamations] = useState(null);
   const [cdr, setCdr] = useState(null);
   const [timelineData, setTimelineData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const search = async () => {
-    const q = msisdn.trim();
+  const { getNom } = useServiceMapping();
+
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) {
+      setMsisdn(q);
+      search(q);
+    }
+  }, [searchParams]);
+
+  const search = async (overrideQ) => {
+    const q = (overrideQ || msisdn).trim();
     if (!q) {
       setError('Veuillez saisir un numéro MSISDN');
       return;
@@ -101,7 +112,18 @@ export default function MsisdnSearch() {
               <tr key={row.id}>
                 {cols.map((c) => (
                   <td key={c.key} style={{ padding: '0.4rem', fontFamily: c.key.includes('msisdn') ? 'monospace' : 'inherit', color: 'var(--text-main)' }}>
-                    {c.key === 'charge_amount' ? formatDT(row.charge_amount) : (row[c.key] ?? '—')}
+                    {c.key === 'charge_amount' ? formatDT(row.charge_amount) : (
+                      (c.key === 'keyword' || c.key === 'service_type') ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontWeight: 600, fontSize: '12px' }}>
+                            {getNom(row[c.key])}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                            {row[c.key]}
+                          </span>
+                        </div>
+                      ) : (row[c.key] ?? '—')
+                    )}
                   </td>
                 ))}
               </tr>
@@ -144,17 +166,16 @@ export default function MsisdnSearch() {
       </div>
 
       {/* ETL Timeline for MSISDN search */}
-      {loading && (
-        <JobStatusBar
-          mode="timeline"
-          steps={[
-            { jobName: 'etl_agg_from_raw', label: 'Recherche OCC' },
-            { jobName: 'etl_cdr_from_tmp', label: 'Recherche MMG' },
-            { jobName: 'import_occ_csv', label: 'Calcul score risque' },
-            { jobName: 'import_mmg_csv', label: 'Construction timeline' },
-          ]}
-        />
-      )}
+      <JobStatusBar
+        mode="timeline"
+        jobTypes={['msisdn_search_all', 'msisdn_reclamations_search', 'msisdn_timeline_build', 'ai_risk_score']}
+        steps={[
+          { jobName: 'msisdn_search_all', label: 'Recherche CDR' },
+          { jobName: 'msisdn_reclamations_search', label: 'Réclamations' },
+          { jobName: 'msisdn_timeline_build', label: 'Timeline' },
+          { jobName: 'ai_risk_score', label: 'Analyse Risque' },
+        ]}
+      />
 
       {(cdr || reclamations !== null) && (
         <>

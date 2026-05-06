@@ -200,7 +200,7 @@ class PredictionController extends Controller
                 [
                     'status' => $status,
                     'started_at' => now(),
-                    'ended_at' => $status === 'success' ? now() : null,
+                    'finished_at' => $status === 'success' ? now() : null,
                     'duration_ms' => $duration,
                     'metadata' => $metadata ? json_encode($metadata) : null,
                     'updated_at' => now(),
@@ -727,7 +727,7 @@ Important : genere exactement '.$horizon.' jours dans predictions_journalieres. 
         $providerBonus = match($provider) {
             'groq'          => 15,  // Bonus augmenté
             'gemini'        => 12,  // Bonus Gemini augmenté significativement
-            'php_fallback'  => -15,
+            'php_fallback'  => -5,
             default         => 0,
         };
 

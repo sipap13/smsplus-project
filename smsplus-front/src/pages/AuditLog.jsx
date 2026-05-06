@@ -304,7 +304,7 @@ export default function AuditLog() {
           <div className="surface surface-pad">
             <h3 className="text-heading" style={{ marginBottom: '1rem', fontSize: '1rem' }}>Activité par heure (24h)</h3>
             <div style={{ width: '100%', height: 250 }}>
-              <ResponsiveContainer>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <AreaChart data={graphStats.by_hour}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis 
@@ -322,7 +322,7 @@ export default function AuditLog() {
           <div className="surface surface-pad">
             <h3 className="text-heading" style={{ marginBottom: '1rem', fontSize: '1rem' }}>Activité par jour (7j)</h3>
             <div style={{ width: '100%', height: 250 }}>
-              <ResponsiveContainer>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={graphStats.by_day}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis 

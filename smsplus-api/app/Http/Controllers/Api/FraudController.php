@@ -106,6 +106,7 @@ prev AS (
 )
 SELECT
   c.svc,
+  s.nom_service,
   c.vol_curr,
   COALESCE(p.avg_prev_7d, 0) AS avg_prev_7d,
   CASE
@@ -114,6 +115,7 @@ SELECT
   END AS pct_increase
 FROM curr c
 LEFT JOIN prev p ON p.svc = c.svc
+LEFT JOIN ra_t_services s ON s.keyword = c.svc
 WHERE c.vol_curr >= :min_count
 ORDER BY
   (CASE WHEN COALESCE(p.avg_prev_7d, 0) = 0 THEN 999999 ELSE (c.vol_curr - p.avg_prev_7d) / p.avg_prev_7d END) DESC,
@@ -131,6 +133,7 @@ LIMIT 200
             $pctFloat = $pct === null ? null : (float) $pct;
             return [
                 'service_key' => $r->svc,
+                'nom_service' => $r->nom_service,
                 'vol_curr' => (int) $r->vol_curr,
                 'avg_prev_7d' => (float) $r->avg_prev_7d,
                 'pct_increase' => $pctFloat,

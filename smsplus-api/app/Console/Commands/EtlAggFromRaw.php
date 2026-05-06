@@ -35,7 +35,7 @@ class EtlAggFromRaw extends Command
         }
 
         try {
-            $job = $monitor->startJob('etl_agg_from_raw', 'command', ['source' => $source, 'dry_run' => $dry]);
+            $job = $monitor->startJob('etl_agg_from_raw', 'command', $source, 0, ['source' => $source, 'dry_run' => $dry]);
             $this->info('ETL job started with ID: ' . $job->id);
         } catch (\Exception $e) {
             $this->error('Failed to start ETL job: ' . $e->getMessage());
@@ -50,7 +50,7 @@ class EtlAggFromRaw extends Command
                 $this->etlMmg($dry);
             }
 
-            $monitor->finishJob($job, ['rows_processed' => DB::table('ra_t_occ_agg')->count() + DB::table('ra_t_mmg_agg')->count()]);
+            $monitor->finishJob($job, 'success', null, ['rows_processed' => DB::table('ra_t_occ_agg')->count() + DB::table('ra_t_mmg_agg')->count()]);
             $this->info('ETL agg-from-raw terminé avec succès.');
 
             return self::SUCCESS;

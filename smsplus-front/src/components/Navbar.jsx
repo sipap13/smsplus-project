@@ -42,6 +42,16 @@ export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'lig
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
+    
+    // Add MSISDN search if it looks like a number
+    const msisdnMatch = s.match(/^\d{8,12}$/);
+    const msisdnAction = msisdnMatch ? [{
+      id: 'msisdn-direct',
+      label: `Rechercher MSISDN: ${s}`,
+      path: `/msisdn?q=${s}`,
+      hint: 'Action · Recherche directe d\'abonné'
+    }] : [];
+
     const serviceResults = services.map(svc => ({
       id: `svc-${svc.id}`,
       label: `${svc.nom_service} (${svc.keyword})`,
@@ -54,9 +64,10 @@ export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'lig
       { id: 'act-duplicates', label: 'Nettoyer les doublons CDR', path: '/duplicates', hint: 'Action' },
       { id: 'act-etl', label: 'Forcer import ETL', path: '/etl-monitor', hint: 'Action' },
       { id: 'act-predict', label: 'Recalculer Prédictions IA', path: '/predictions', hint: 'Action' },
+      { id: 'act-import', label: 'Importer de nouveaux CDR', path: '/imports', hint: 'Action' },
     ];
 
-    const all = [...PAGES, ...serviceResults, ...actions];
+    const all = [...msisdnAction, ...PAGES, ...serviceResults, ...actions];
     if (!s) return all;
     return all.filter((p) => 
       p.label.toLowerCase().includes(s) || 

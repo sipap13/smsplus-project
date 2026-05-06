@@ -23,7 +23,10 @@ class AiProviderService
             $this->logProviderCall('groq', true);
             return ['content' => $result, 'provider' => 'groq', 'fallback' => false, 'model' => config('services.groq.model')];
         } catch (\Exception $e) {
-            Log::warning('[AI] Groq indisponible: ' . $e->getMessage());
+            Log::error('[AI] Groq error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace' => substr($e->getTraceAsString(), 0, 500)
+            ]);
             $this->logProviderCall('groq', false);
             $this->logFallbackEvent('groq', $e->getMessage());
         }
@@ -36,7 +39,10 @@ class AiProviderService
                 $this->logProviderCall('gemini', true);
                 return ['content' => $result, 'provider' => 'gemini', 'fallback' => false, 'model' => config('services.gemini.model')];
             } catch (\Exception $e) {
-                Log::warning('[AI] Gemini indisponible: ' . $e->getMessage());
+                Log::error('[AI] Gemini error: ' . $e->getMessage(), [
+                    'exception' => get_class($e),
+                    'trace' => substr($e->getTraceAsString(), 0, 500)
+                ]);
                 $this->logProviderCall('gemini', false);
                 $this->logFallbackEvent('gemini', $e->getMessage());
                 
@@ -47,7 +53,7 @@ class AiProviderService
                     $this->logProviderCall('groq', true);
                     return ['content' => $result, 'provider' => 'groq', 'fallback' => true, 'model' => config('services.groq.model')];
                 } catch (\Exception $groqException) {
-                    Log::warning('[AI] Groq fallback also failed: ' . $groqException->getMessage());
+                    Log::error('[AI] Groq fallback also failed: ' . $groqException->getMessage());
                     $this->logProviderCall('groq', false);
                     $this->logFallbackEvent('groq', $groqException->getMessage());
                 }
@@ -68,6 +74,7 @@ class AiProviderService
     private function callGroq(string $system, string $user, int $maxTokens, float $temperature): string
     {
         try {
+            Log::debug('[AI] Groq call with key: ' . substr(config('services.groq.api_key'), 0, 8) . '...');
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . config('services.groq.api_key'),
                 'Content-Type'  => 'application/json',
@@ -212,9 +219,9 @@ class AiProviderService
             DB::table('ra_t_etl_jobs')->insert([
                 'job_name'   => 'ai_fallback_' . $provider,
                 'status'     => 'fallback',
-                'message'    => substr($reason, 0, 500),
-                'started_at' => now(),
-                'ended_at'   => now(),
+                'error_message' => substr($reason, 0, 500),
+                'started_at'    => now(),
+                'finished_at'   => now(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

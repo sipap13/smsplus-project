@@ -39,15 +39,46 @@ class EtlMonitorService
         if (!empty($metadata)) {
             $updateData['metadata'] = array_merge((array) ($job->metadata ?? []), $metadata);
             
-            // Update row counts if provided
-            if (isset($metadata['nb_lignes'])) {
-                $updateData['rows_processed'] = $metadata['nb_lignes'];
-            } elseif (isset($metadata['rows_processed'])) {
-                $updateData['rows_processed'] = $metadata['rows_processed'];
+            // Update row counts using correct column names
+            if (isset($metadata['total_rows'])) {
+                $updateData['total_rows'] = $metadata['total_rows'];
+            } elseif (isset($metadata['nb_lignes'])) {
+                $updateData['total_rows'] = $metadata['nb_lignes'];
             }
-            
-            if (isset($metadata['nb_resultats'])) {
-                $updateData['rows_inserted'] = $metadata['nb_resultats'];
+
+            if (isset($metadata['processed_rows'])) {
+                $updateData['processed_rows'] = $metadata['processed_rows'];
+            } elseif (isset($metadata['rows_processed'])) {
+                $updateData['processed_rows'] = $metadata['rows_processed'];
+            } elseif (isset($metadata['rows_inserted'])) {
+                $updateData['processed_rows'] = $metadata['rows_inserted'];
+            } elseif (isset($metadata['nb_resultats'])) {
+                $updateData['processed_rows'] = $metadata['nb_resultats'];
+            } elseif (isset($metadata['nb_reclamations'])) {
+                $updateData['processed_rows'] = $metadata['nb_reclamations'];
+            } elseif (isset($metadata['nb_services'])) {
+                $updateData['processed_rows'] = $metadata['nb_services'];
+            } elseif (isset($metadata['nb_alertes'])) {
+                $updateData['processed_rows'] = $metadata['nb_alertes'];
+            } elseif (isset($metadata['nb_transactions'])) {
+                $updateData['processed_rows'] = $metadata['nb_transactions'];
+            } elseif (isset($metadata['nb_points'])) {
+                $updateData['processed_rows'] = $metadata['nb_points'];
+            } elseif (isset($metadata['count'])) {
+                $updateData['processed_rows'] = $metadata['count'];
+            }
+
+            if (isset($metadata['error_rows'])) {
+                $updateData['error_rows'] = $metadata['error_rows'];
+            } elseif (isset($metadata['rows_skipped'])) {
+                $updateData['error_rows'] = $metadata['rows_skipped'];
+            }
+
+            // Si c'est un job système/commande/rapport réussi mais sans volume, on met 1 par défaut
+            if ($status === 'success' && empty($updateData['processed_rows']) && empty($updateData['total_rows'])) {
+                if (in_array($job->category, ['systeme', 'command', 'rapport'])) {
+                    $updateData['processed_rows'] = 1;
+                }
             }
         }
         
@@ -73,15 +104,18 @@ class EtlMonitorService
         $updateData = [];
         
         if (!empty($metadata)) {
-            $updateData['metadata'] = array_merge($job->metadata ?? [], $metadata);
+            $updateData['metadata'] = array_merge((array) ($job->metadata ?? []), $metadata);
             
-            // Update row counts if provided
-            if (isset($metadata['rows_processed'])) {
-                $updateData['rows_processed'] = $metadata['rows_processed'];
+            if (isset($metadata['total_rows'])) {
+                $updateData['total_rows'] = $metadata['total_rows'];
             }
-            
-            if (isset($metadata['rows_inserted'])) {
-                $updateData['rows_inserted'] = $metadata['rows_inserted'];
+            if (isset($metadata['processed_rows'])) {
+                $updateData['processed_rows'] = $metadata['processed_rows'];
+            } elseif (isset($metadata['rows_inserted'])) {
+                $updateData['processed_rows'] = $metadata['rows_inserted'];
+            }
+            if (isset($metadata['error_rows'])) {
+                $updateData['error_rows'] = $metadata['error_rows'];
             }
         }
         

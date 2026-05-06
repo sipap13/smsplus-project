@@ -22,6 +22,8 @@ const pageTitles = {
   '/duplicates': 'Doublons CDR',
   '/audit-logs': 'Logs d\'audit',
   '/data-coverage': 'Audit Couverture Données',
+  '/data-lineage': 'Data Lineage Interactive',
+  '/etl-performance': 'Performance ETL',
 };
 
 export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCount, setSidebarUnread }) {
@@ -60,6 +62,8 @@ export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCou
     if (p.startsWith('/duplicates')) return 'duplicates';
     if (p.startsWith('/audit-logs')) return 'audit-logs';
     if (p.startsWith('/data-coverage')) return 'data-coverage';
+    if (p.startsWith('/data-lineage')) return 'data-lineage';
+    if (p.startsWith('/etl-performance')) return 'etl-performance';
     return 'dashboard';
   })();
 
@@ -90,6 +94,8 @@ export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCou
               duplicates: '/duplicates',
               'audit-logs': '/audit-logs',
               'data-coverage': '/data-coverage',
+              'data-lineage': '/data-lineage',
+              'etl-performance': '/etl-performance',
             };
             navigate(map[id] || '/dashboard');
           }}

@@ -83,7 +83,17 @@ class NotificationController extends Controller
 
     public function count(Request $request): JsonResponse
     {
+        $jobId = null;
         try {
+            // Un job très court pour signaler l'activité de polling dans le JobStatusBar
+            $jobId = $this->monitor->startJob(
+                'notifications_polling',
+                'systeme',
+                null,
+                0,
+                ['triggered_by' => 'system']
+            );
+
             $user = $request->attributes->get('auth_user');
             $userId = (int) ($user->id ?? 0);
 
@@ -98,12 +108,24 @@ class NotificationController extends Controller
                 ->where('priorite', 'critique')
                 ->exists();
 
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'success', null, [
+                    'user_id' => $userId,
+                    'non_lues' => $nonLues,
+                    'processed_rows' => 1, // Une requête de polling = 1 unité de travail
+                ]);
+            }
+
             return response()->json([
                 'non_lues' => $nonLues,
                 'has_critique' => $hasCritical,
             ]);
         } catch (\Throwable $exception) {
             Log::error('Notifications count error', ['message' => $exception->getMessage()]);
+
+            if ($jobId) {
+                $this->monitor->finishJob($jobId, 'failed', $exception->getMessage());
+            }
 
             return response()->json([
                 'non_lues' => 0,

@@ -19,6 +19,7 @@ class DuplicateController extends Controller
     {
         $dateDebut = $request->query('date_debut', now()->subDays(30)->toDateString());
         $keyword = $request->query('keyword');
+        $callType = $request->query('call_type', 'VAS');
         $minOccurrences = (int) $request->query('min_occurrences', 2);
 
         $query = DB::table('ra_t_occ_cdr_detail')
@@ -29,12 +30,16 @@ class DuplicateController extends Controller
                 'start_hour',
                 'charge_amount',
                 'keyword',
+                'call_type',
                 DB::raw('COUNT(*) as occurrences'),
                 DB::raw('array_agg(id) as ids'),
                 DB::raw('SUM(charge_amount) as revenu_duplique')
             ])
-            ->where('call_type', 'VAS')
             ->where('start_date', '>=', $dateDebut);
+
+        if ($callType && $callType !== 'all') {
+            $query->where('call_type', $callType);
+        }
 
         if ($keyword) {
             $query->where('keyword', $keyword);
@@ -46,7 +51,8 @@ class DuplicateController extends Controller
                 'start_date',
                 'start_hour',
                 'charge_amount',
-                'keyword'
+                'keyword',
+                'call_type'
             ])
             ->havingRaw('COUNT(*) >= ?', [$minOccurrences])
             ->orderByDesc('occurrences')

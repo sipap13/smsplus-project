@@ -60,36 +60,41 @@
 
 :is(html, body).theme-dark {
   color-scheme: dark;
-  /* DS (Dark) */
-  --bg-page: #0f172a;              /* Background */
-  --bg-elevated: #1e293b;          /* Background Elevated */
-  --bg-surface: #334155;           /* Surface */
-  --bg-surface-hover: #475569;     /* Surface Hover */
+  /* Sleek Futuristic Dark DS */
+  --bg-page: #020617;              /* Deeper Navy/Black */
+  --bg-elevated: #0f172a;          /* Slate 900 */
+  --bg-surface: #1e293b;           /* Slate 800 */
+  --bg-surface-hover: #334155;     /* Slate 700 */
 
-  --text-main: #f1f5f9;            /* Foreground */
-  --text-muted: #94a3b8;           /* Foreground Secondary */
-  --text-subtle: #64748b;          /* Foreground Tertiary */
-  --text-heading: var(--text-main);
+  --text-main: #f8fafc;            /* Slate 50 */
+  --text-muted: #94a3b8;           /* Slate 400 */
+  --text-subtle: #475569;          /* Slate 500 */
+  --text-heading: #ffffff;
 
-  --primary: #3b82f6;              /* Accent */
-  --primary-2: #60a5fa;            /* Accent Hover */
-  --primary-soft: #1e3a5f;         /* Accent Light */
+  --primary: #38bdf8;              /* Sky 400 (Neon) */
+  --primary-2: #7dd3fc;            /* Sky 300 */
+  --primary-soft: rgba(56, 189, 248, 0.1);
 
-  --warning: #fb923c;              /* Warning */
-  --danger: #fb7185;               /* Error */
-  --success: #4ade80;              /* Success */
+  --warning: #fbbf24;              /* Amber 400 */
+  --danger: #f87171;               /* Red 400 */
+  --success: #4ade80;              /* Green 400 */
 
-  --border: #334155;               /* Border */
-  --shadow-sm: none;
-  --shadow-md: none;
-  --ring: color-mix(in srgb, var(--primary) 45%, transparent);
+  --border: rgba(51, 65, 85, 0.5); /* Semi-transparent border */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --ring: rgba(56, 189, 248, 0.3);
 
-  --table-head-bg: var(--bg-surface);
-  --table-row-alt: #13171b;
-  --chip-bg: color-mix(in srgb, var(--primary) 18%, transparent);
-  --chip-text: var(--primary-2);
-  --toolbar-bg: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  --table-head-bg: #1e293b;
+  --table-row-alt: #0b1121;
+  --chip-bg: rgba(56, 189, 248, 0.15);
+  --chip-text: #7dd3fc;
+  --toolbar-bg: rgba(15, 23, 42, 0.8);
   --toolbar-border: var(--border);
+
+  /* Glassmorphism additions */
+  --glass-bg: rgba(15, 23, 42, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 *,

@@ -161,6 +161,12 @@ class CdrController extends Controller
             Log::warning('EtlMonitorService finishJob failed for cdr_occ_paginate', ['error' => $e->getMessage()]);
         }
 
+        $servicesMap = DB::table('ra_t_services')->pluck('nom_service', 'keyword')->toArray();
+        $data->transform(function($row) use ($servicesMap) {
+            $row->nom_service = $servicesMap[$row->keyword] ?? $row->keyword;
+            return $row;
+        });
+
         return response()->json([
             'data'                 => $data,
             'total'                => $total,
@@ -213,6 +219,12 @@ class CdrController extends Controller
         } catch (\Exception $e) {
             Log::warning('EtlMonitorService finishJob failed for cdr_mmg_paginate', ['error' => $e->getMessage()]);
         }
+
+        $servicesMap = DB::table('ra_t_services')->pluck('nom_service', 'keyword')->toArray();
+        $data->transform(function($row) use ($servicesMap) {
+            $row->nom_service = $servicesMap[$row->service_type] ?? $row->service_type;
+            return $row;
+        });
 
         return response()->json([
             'data'         => $data,
@@ -335,11 +347,24 @@ class CdrController extends Controller
                     'mmg_total' => $mmgTotal,
                     'occ_shown' => $occ->count(),
                     'mmg_shown' => $mmg->count(),
+                    'processed_rows' => $occTotal + $mmgTotal,
                 ]);
             }
         } catch (\Exception $e) {
             Log::warning('EtlMonitorService finishJob failed for msisdn_search_all', ['error' => $e->getMessage()]);
         }
+
+        $servicesMap = DB::table('ra_t_services')->pluck('nom_service', 'keyword')->toArray();
+        
+        $occ->transform(function($row) use ($servicesMap) {
+            $row->nom_service = $servicesMap[$row->keyword] ?? $row->keyword;
+            return $row;
+        });
+        
+        $mmg->transform(function($row) use ($servicesMap) {
+            $row->nom_service = $servicesMap[$row->service_type] ?? $row->service_type;
+            return $row;
+        });
 
         return response()->json([
             'occ'              => $occ,
@@ -530,6 +555,7 @@ class CdrController extends Controller
                     'total_transactions' => count($items),
                     'periode_jours' => count($sortedDates),
                     'services_utilises' => count($servicesUtilises),
+                    'processed_rows' => count($items),
                 ]);
             }
         } catch (\Exception $e) {

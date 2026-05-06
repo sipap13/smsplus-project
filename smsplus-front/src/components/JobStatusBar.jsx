@@ -39,10 +39,11 @@ const JOB_LABELS = {
   'alerte_resolve':          'Résolution alerte',
   'notification_send':       'Envoi notification',
   'notifications_load':      'Chargement notifications',
+  'notifications_polling':   'Polling notifications',
   'notification_mark_read':  'Lecture notification',
   'notifications_mark_all_read': 'Tout lire',
   'dashboard_stats_load':    'Chargement KPIs',
-  'dashboard_revenus_load':  'Chargement revenus',
+  'dashboard_revenus_chart': 'Chargement revenus chart',
   'dashboard_anomaly_check': 'Vérification anomalies',
   'services_list_load':      'Chargement services',
   'service_create':          'Création service',
@@ -831,7 +832,7 @@ export default function JobStatusBar({
     try {
       const params = new URLSearchParams();
       jobTypes.forEach((t) => params.append('types[]', t));
-      params.append('limit', '5');
+      params.append('limit', '15');
 
       const res = await api.get(`/etl/jobs/by-types?${params.toString()}`);
       setJobs(res.data?.jobs || []);

@@ -45,10 +45,11 @@ class EtlMonitorController extends Controller
                     'job_type' => $job->job_type,
                     'status' => $job->status,
                     'duration_ms' => $job->duration_ms,
-                    'pourcentage' => $job->pourcentage ?? 0,
-                    'lignes_traitees' => (int)($job->rows_processed ?? 0),
-                    'lignes_inserees' => (int)($job->rows_inserted ?? 0),
-                    'lignes_ignorees' => (int)($job->rows_skipped ?? 0),
+                    'pourcentage' => $job->total_rows > 0 ? (int)round(($job->processed_rows / $job->total_rows) * 100) : 0,
+                    'lignes_traitees' => (int)($job->processed_rows ?? 0),
+                    'lignes_inserees' => (int)($job->processed_rows ?? 0),
+                    'lignes_ignorees' => (int)($job->error_rows ?? 0),
+                    'total_lignes' => (int)($job->total_rows ?? 0),
                     'main_metric' => $this->getMainMetric($job),
                     'error_message' => $job->error_message,
                     'metadata' => $job->metadata 
@@ -71,6 +72,106 @@ class EtlMonitorController extends Controller
                 'page_filter' => $page,
             ],
         ]);
+    }
+
+    public function triggerAgg(Request $request): JsonResponse
+    {
+        $source = $request->input('source', 'all');
+        
+        // On lance la commande en arrière-plan via le bus de tâches
+        \Illuminate\Support\Facades\Artisan::queue('etl:agg-from-raw', [
+            'source' => $source
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Agrégation des données CDR lancée en arrière-plan.',
+        ]);
+    }
+
+    public function performanceStats(Request $request): JsonResponse
+    {
+        try {
+            $days = (int) $request->query('days', 30);
+            $dateLimit = now()->subDays($days);
+
+            // Pour éviter de surcharger le frontend avec des milliers de points (ex: polling),
+            // on agrège les données par heure directement en SQL.
+            $jobs = \App\Models\EtlJob::where('status', 'success')
+                ->whereNotNull('started_at')
+                ->where('started_at', '>=', $dateLimit)
+                ->where('started_at', '<=', now())
+                ->selectRaw('
+                    job_name, 
+                    date_trunc(\'hour\', started_at) as hour, 
+                    AVG(duration_ms) as avg_duration, 
+                    SUM(COALESCE(total_rows, 0) + COALESCE(processed_rows, 0)) as volume_total,
+                    COUNT(*) as job_count
+                ')
+                ->groupBy('job_name', 'hour')
+                ->orderBy('hour', 'desc') // On prend les plus récents en premier
+                ->limit(500) // Sécurité
+                ->get();
+
+            $result = [];
+            $nowHour = now()->startOfHour();
+
+            // On regroupe par job
+            foreach ($jobs->reverse() as $job) {
+                $name = $job->job_name;
+                if (!isset($result[$name])) {
+                    $result[$name] = [];
+                }
+                
+                $result[$name][] = [
+                    'date' => \Carbon\Carbon::parse($job->hour)->toIso8601String(),
+                    'duration_sec' => round($job->avg_duration / 1000, 2),
+                    'rows' => (int) $job->volume_total,
+                    'count' => $job->job_count
+                ];
+            }
+
+            // Pour chaque job, si la dernière heure n'est pas "maintenant", on ajoute un point à 0 
+            // pour forcer le graphique à s'étendre jusqu'à l'heure actuelle.
+            foreach ($result as $name => &$dataPoints) {
+                if (empty($dataPoints)) continue;
+                
+                $lastPoint = end($dataPoints);
+                $lastDate = \Carbon\Carbon::parse($lastPoint['date']);
+                
+                if ($lastDate->lt($nowHour)) {
+                    $dataPoints[] = [
+                        'date' => $nowHour->toIso8601String(),
+                        'duration_sec' => 0,
+                        'rows' => 0,
+                        'count' => 0,
+                        'is_placeholder' => true
+                    ];
+                }
+            }
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('PerformanceStats Error', ['msg' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function lineageStats(): JsonResponse
+    {
+        try {
+            $stats = [
+                'ra_t_tmp_occ' => \Illuminate\Support\Facades\DB::table('ra_t_tmp_occ')->count(),
+                'ra_t_tmp_mmg' => \Illuminate\Support\Facades\DB::table('ra_t_tmp_mmg')->count(),
+                'ra_t_occ_cdr_detail' => \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')->count(),
+                'ra_t_mmg_cdr_det' => \Illuminate\Support\Facades\DB::table('ra_t_mmg_cdr_det')->count(),
+                'ra_t_occ_agg' => \Illuminate\Support\Facades\DB::table('ra_t_occ_agg')->count(),
+                'ra_t_mmg_agg' => \Illuminate\Support\Facades\DB::table('ra_t_mmg_agg')->count(),
+            ];
+            return response()->json($stats);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     public function stats(): JsonResponse
@@ -165,16 +266,16 @@ class EtlMonitorController extends Controller
         
         return match ($job->job_name) {
             'import_occ_csv', 'import_occ_xlsx', 'import_mmg_csv', 'import_mmg_xlsx' => 
-                sprintf("%d lignes insérées", $metadata['rows_inserted'] ?? $job->rows_inserted ?? 0),
+                sprintf("%d lignes insérées", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
             
             'cdr_occ_paginate', 'cdr_mmg_paginate' => 
-                sprintf("%d résultats", $metadata['nb_resultats'] ?? $job->rows_processed ?? 0),
+                sprintf("%d résultats", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
             
             'export_occ_excel', 'export_mmg_excel', 'export_revenus_csv' => 
-                sprintf("%d lignes exportées", $metadata['nb_lignes'] ?? $job->rows_processed ?? 0),
+                sprintf("%d lignes exportées", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
             
             'services_list_load' => 
-                sprintf("%d services", $metadata['nb_services'] ?? $job->rows_processed ?? 0),
+                sprintf("%d services", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
             
             'user_login', 'user_2fa_verify' => 
                 sprintf("Connexion %s", $job->status === 'success' ? 'réussie' : 'échouée'),
@@ -183,13 +284,13 @@ class EtlMonitorController extends Controller
                 sprintf("Alerte %s", $job->status === 'success' ? 'traitée' : 'échouée'),
             
             'notifications_load' => 
-                sprintf("%d notifications", $metadata['nb_notifications'] ?? $job->rows_processed ?? 0),
+                sprintf("%d notifications", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
             
             'msisdn_search_all', 'msisdn_timeline_build' => 
-                sprintf("%d résultats", $metadata['occ_total'] + $metadata['mmg_total'] ?? $job->rows_processed ?? 0),
+                sprintf("%d résultats", ($metadata['occ_total'] ?? 0) + ($metadata['mmg_total'] ?? 0) ?: ($job->processed_rows ?? 0)),
             
             default => 
-                sprintf("%d lignes traitées", $job->rows_processed ?? 0),
+                sprintf("%d lignes traitées", $job->processed_rows ?? 0),
         };
     }
 

@@ -74,10 +74,12 @@ export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 
     { id: 'alerts', label: 'Alertes fraude', icon: 'fraud', show: isOp || isAdmin },
     { id: 'duplicates', label: 'Doublons CDR', icon: 'duplicates', show: isOp || isAdmin },
     { id: 'predictions', label: 'Prédictions IA', icon: 'predictions', show: isBuss || isAdmin },
-    { id: 'imports', label: 'Import Données', icon: 'import', show: isAdmin },
+    { id: 'imports', label: 'Import Données', icon: 'import', show: isAdmin || isOp },
     { id: 'users', label: 'Utilisateurs', icon: 'users', show: isAdmin },
     { id: 'audit-logs', label: 'Logs d\'audit', icon: 'audit', show: isAdmin },
     { id: 'data-coverage', label: 'Couverture Données', icon: 'fraud', show: isAdmin || isBuss },
+    { id: 'data-lineage', label: 'Data Lineage', icon: 'predictions', show: true },
+    { id: 'etl-performance', label: 'Performance ETL', icon: 'audit', show: isAdmin || isOp },
   ];
 
   return (

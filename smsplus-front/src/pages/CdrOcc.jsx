@@ -4,6 +4,7 @@ import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import JobStatusBar from '../components/JobStatusBar';
 import { formatDT } from '../lib/format';
+import useServiceMapping from '../hooks/useServiceMapping';
 
 const PER_PAGE = 50;
 
@@ -123,6 +124,8 @@ export default function CdrOcc() {
     );
   };
 
+  const { services: mappedServices, getNom } = useServiceMapping();
+
   const cols = [
     { key: 'a_msisdn', label: 'A MSISDN' },
     { key: 'b_msisdn', label: 'B MSISDN' },
@@ -134,7 +137,7 @@ export default function CdrOcc() {
     { key: 'roaming_type', label: 'Roaming' },
     { key: 'partner', label: 'Partenaire' },
     { key: 'charge_amount', label: 'Montant' },
-    { key: 'keyword', label: 'Keyword' },
+    { key: 'keyword', label: 'Service' },
   ];
 
   return (
@@ -152,11 +155,11 @@ export default function CdrOcc() {
           <input className="field-control" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
         <div className="field">
-          <div className="field-label">Keyword</div>
+          <div className="field-label">Service</div>
           <select className="field-control" value={keyword} onChange={(e) => setKeyword(e.target.value)}>
-            <option value="">(tous)</option>
-            {keywords.map((k) => (
-              <option key={k} value={k}>{k}</option>
+            <option value="">(tous les services)</option>
+            {mappedServices.map((s) => (
+              <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>
             ))}
           </select>
         </div>
@@ -236,7 +239,7 @@ export default function CdrOcc() {
         
         {/* Job Status Dropdown */}
         <JobStatusBar
-          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_occ_csv']}
+          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_occ_csv', 'notifications_polling']}
           title=""
           compact={false}
           refreshInterval={10000}
@@ -280,7 +283,18 @@ export default function CdrOcc() {
                   <tr key={row.id}>
                     {cols.map((c) => (
                       <td key={c.key} data-label={c.label} className={c.key.includes('msisdn') ? 'mono' : ''} style={{ padding: '0.55rem 0.75rem', fontSize: '0.82rem', color: 'var(--text-main)' }}>
-                        {c.key === 'charge_amount' ? formatDT(row.charge_amount) : (row[c.key] ?? '—')}
+                        {c.key === 'charge_amount' ? formatDT(row.charge_amount) : (
+                          c.key === 'keyword' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                                {getNom(row.keyword)}
+                              </span>
+                              <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                {row.keyword}
+                              </span>
+                            </div>
+                          ) : (row[c.key] ?? '—')
+                        )}
                       </td>
                     ))}
                   </tr>

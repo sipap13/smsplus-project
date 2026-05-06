@@ -12,7 +12,7 @@ class MetaController extends Controller
     public function dashboardRange(Request $request)
     {
         $includeData = in_array(strtolower((string) $request->query('include_data', '0')), ['1', 'true', 'yes'], true);
-        $allowedCallTypes = ['VAS', 'SMS', 'VOICE'];
+        $allowedCallTypes = ['VAS', 'SMS', 'VOICE', 'DATA'];
 
         $cacheKey = 'dashboard_range_' . ($includeData ? 'with_data' : 'no_data');
 

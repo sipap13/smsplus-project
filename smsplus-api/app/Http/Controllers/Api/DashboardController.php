@@ -112,7 +112,9 @@ class DashboardController extends Controller
         });
 
         if ($jobId) {
-            $this->monitor->finishJob($jobId, 'success', null, $stats);
+            $this->monitor->finishJob($jobId, 'success', null, array_merge($stats, [
+                'processed_rows' => $stats['cdr_du_jour'] ?? 0
+            ]));
         }
 
         return response()->json($stats);
@@ -122,19 +124,19 @@ class DashboardController extends Controller
     {
         $tables = [
             'ra_t_occ_cdr_detail' => [
-                'utilisees' => ['charge_amount', 'a_msisdn', 'keyword', 'start_date', 'start_hour', 'subscriber_type', 'call_type', 'event_type'],
-                'total_cols' => 13
+                'utilisees' => ['charge_amount', 'a_msisdn', 'keyword', 'start_date', 'start_hour', 'subscriber_type', 'call_type', 'event_type', 'roaming_type', 'partner'],
+                'total_cols' => 16
             ],
             'ra_t_mmg_cdr_det' => [
-                'utilisees' => ['a_msisdn', 'start_date', 'start_hour', 'service_type'],
+                'utilisees' => ['a_msisdn', 'start_date', 'start_hour', 'service_type', 'event_status'],
                 'total_cols' => 15
             ],
             'ra_t_services' => [
-                'utilisees' => ['keyword', 'nom_service', 'actif', 'nom_fournisseur', 'type_service', 'prix'],
+                'utilisees' => ['keyword', 'nom_service', 'actif', 'nom_fournisseur', 'type_service', 'prix', 'numero_court'],
                 'total_cols' => 10
             ],
             'ra_t_alerts' => [
-                'utilisees' => ['keyword', 'status', 'seuil_pct', 'count_nb_sms', 'start_date'],
+                'utilisees' => ['keyword', 'status', 'seuil_pct', 'count_nb_sms', 'start_date', 'created_at'],
                 'total_cols' => 12
             ]
         ];
@@ -152,9 +154,9 @@ class DashboardController extends Controller
         return response()->json([
             'tables' => $results,
             'recommandations' => [
-                'Ajouter graphique par heure (start_hour)',
-                'Afficher taux succès MMG (event_status)',
-                'Afficher répartition roaming (roaming_type)',
+                'Afficher répartition par Partenaire (partner)',
+                'Analyse des numéros destinataires (b_msisdn)',
+                'Corrélation avec les types d\'erreurs (event_type_orig)',
                 'Afficher écart tarif théorique (JOIN services)'
             ]
         ]);
@@ -290,6 +292,11 @@ class DashboardController extends Controller
                 ->get();
         });
 
+        // Apply outlier detection for daily view
+        if ($granularity === 'day') {
+            $data = $this->applyOutlierDetection($data, 'total');
+        }
+
         if ($granularity === 'day' && $data->count() >= 8) {
             $dailyTotals = [];
             foreach ($data as $row) {
@@ -320,6 +327,7 @@ class DashboardController extends Controller
                     'nb_points' => $data->count(),
                     'granularity' => $granularity,
                     'days' => $days,
+                    'processed_rows' => $data->sum('nb_cdr'),
                 ]);
             }
         } catch (\Exception $e) {
@@ -328,6 +336,7 @@ class DashboardController extends Controller
 
         return response()->json($data);
     }
+
 
     public function revenusMonthly(Request $request)
     {
@@ -473,15 +482,16 @@ class DashboardController extends Controller
             return $out;
         });
 
-        return response()->json($series);
+        $data = $this->applyOutlierDetection($series, 'occ');
+        return response()->json($data);
     }
 
     public function revenusEnrichi(Request $request)
     {
         $days = max(1, min((int) $request->query('days', 14), 60));
-        $cacheKey = "dashboard_revenus_enrichi_v1_{$days}";
+        $cacheKey = "dashboard_revenus_enrichi_v2_{$days}";
         
-        return Cache::remember($cacheKey, 600, function() use ($days) {
+        $result = Cache::remember($cacheKey, 600, function() use ($days) {
             $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date');
             $anchorDate = $maxDate ?: now()->toDateString();
             $fromDate = date('Y-m-d', strtotime($anchorDate . " -{$days} days"));
@@ -501,7 +511,7 @@ class DashboardController extends Controller
                 ->get()
                 ->keyBy('date');
 
-            $parJour = [];
+            $parJour = collect();
             $cursor = $fromDate;
             while ($cursor <= $anchorDate) {
                 $occ = $occData->get($cursor);
@@ -510,13 +520,13 @@ class DashboardController extends Controller
                 $cOcc = (int)($occ->cdr_occ ?? 0);
                 $cMmg = (int)($mmg->cdr_mmg ?? 0);
                 
-                $parJour[] = [
+                $parJour->push((object)[
                     'date' => $cursor,
                     'occ' => $rev,
                     'cdr_occ' => $cOcc,
                     'cdr_mmg' => $cMmg,
                     'ecart_pct' => $cOcc > 0 ? round(abs($cMmg - $cOcc) / $cOcc * 100, 2) : 0
-                ];
+                ]);
                 $cursor = date('Y-m-d', strtotime($cursor . ' +1 day'));
             }
 
@@ -536,7 +546,7 @@ class DashboardController extends Controller
                 return $item;
             });
 
-            // 3. Par heure (Derniers 7 jours pour plus de pertinence)
+            // 3. Par heure
             $parHeure = DB::table('ra_t_occ_cdr_detail')
                 ->where('start_date', '>=', date('Y-m-d', strtotime($anchorDate . ' -7 days')))
                 ->selectRaw("start_hour as heure, COUNT(*) as nb_cdr")
@@ -544,7 +554,7 @@ class DashboardController extends Controller
                 ->orderBy('start_hour')
                 ->get();
 
-            // 4. Par Subscriber (Prepaid vs Hybrid)
+            // 4. Par Subscriber
             $parSubscriberData = DB::table('ra_t_occ_cdr_detail')
                 ->where('start_date', '>=', $fromDate)
                 ->selectRaw("COALESCE(subscriber_type, 'UNKNOWN') as type, SUM(charge_amount) as revenus")
@@ -567,7 +577,19 @@ class DashboardController extends Controller
                 'par_subscriber' => $parSubscriber
             ];
         });
+
+        // Robust Outlier detection using the centralized method
+        $result['par_jour'] = $this->applyOutlierDetection($result['par_jour'], 'occ');
+        $parJour = $result['par_jour'];
+
+        $result['stats'] = [
+            'outliers' => $parJour->where('is_outlier', true)->pluck('date')->values(),
+            'count' => $parJour->where('is_outlier', true)->count()
+        ];
+
+        return response()->json($result);
     }
+
 
     public function alertesRecentes()
     {
@@ -595,9 +617,9 @@ class DashboardController extends Controller
         $endDate = $request->query('end_date', $maxDate);
         $granularite = $request->query('granularite', 'day');
 
-        $cacheKey = "db_trafic_mmg_occ_v2_{$startDate}_{$endDate}_{$granularite}";
+        $cacheKey = "db_trafic_mmg_occ_v3_{$startDate}_{$endDate}_{$granularite}";
         
-        return Cache::remember($cacheKey, 600, function() use ($startDate, $endDate, $granularite) {
+        $data = Cache::remember($cacheKey, 600, function() use ($startDate, $endDate, $granularite) {
             $queryOcc = DB::table('ra_t_occ_cdr_detail')
                 ->where('start_date', '>=', $startDate)
                 ->where('start_date', '<=', $endDate);
@@ -607,16 +629,52 @@ class DashboardController extends Controller
                 ->where('start_date', '<=', $endDate);
 
             if ($granularite === 'hour') {
-                $occ = $queryOcc->selectRaw("start_date, start_hour as hour, COUNT(*) as nb")
-                    ->groupBy('start_date', 'hour')->get();
-                $mmg = $queryMmg->selectRaw("start_date, start_hour as hour, COUNT(*) as nb")
-                    ->groupBy('start_date', 'hour')->get();
+                $expr = "start_date::text || ' ' || LPAD(start_hour::text, 2, '0') || ':00'";
+                $occData = $queryOcc->selectRaw("$expr as bucket, COUNT(*) as nb")
+                    ->groupBy(DB::raw($expr))->pluck('nb', 'bucket');
+                $mmgData = $queryMmg->selectRaw("$expr as bucket, COUNT(*) as nb")
+                    ->groupBy(DB::raw($expr))->pluck('nb', 'bucket');
                 
-                // Merge logic for hours...
-                // For simplicity in this complex request, I'll focus on Day/Hour/Week group by
+                $buckets = $occData->keys()->merge($mmgData->keys())->unique()->sort();
+                $results = [];
+                foreach ($buckets as $b) {
+                    $o = $occData->get($b, 0);
+                    $m = $mmgData->get($b, 0);
+                    $results[] = [
+                        'date' => $b,
+                        'label' => date('d/m H:i', strtotime($b)),
+                        'occ' => $o,
+                        'mmg' => $m,
+                        'ecart_pct' => $o > 0 ? round(abs($m - $o) / $o * 100, 1) : 0,
+                    ];
+                }
+                return $results;
             }
 
-            // Standard Day grouping
+            if ($granularite === 'week') {
+                $expr = "to_char(start_date, 'IYYY-IW')";
+                $occData = $queryOcc->selectRaw("$expr as bucket, COUNT(*) as nb")
+                    ->groupBy(DB::raw($expr))->pluck('nb', 'bucket');
+                $mmgData = $queryMmg->selectRaw("$expr as bucket, COUNT(*) as nb")
+                    ->groupBy(DB::raw($expr))->pluck('nb', 'bucket');
+                
+                $buckets = $occData->keys()->merge($mmgData->keys())->unique()->sort();
+                $results = [];
+                foreach ($buckets as $b) {
+                    $o = $occData->get($b, 0);
+                    $m = $mmgData->get($b, 0);
+                    $results[] = [
+                        'date' => $b,
+                        'label' => "Sem " . explode('-', $b)[1],
+                        'occ' => $o,
+                        'mmg' => $m,
+                        'ecart_pct' => $o > 0 ? round(abs($m - $o) / $o * 100, 1) : 0,
+                    ];
+                }
+                return $results;
+            }
+
+            // Default: Day
             $occData = $queryOcc->selectRaw("start_date as date, COUNT(*) as nb")
                 ->groupBy('start_date')->pluck('nb', 'date');
             
@@ -628,19 +686,25 @@ class DashboardController extends Controller
             while ($cursor <= $endDate) {
                 $o = $occData->get($cursor, 0);
                 $m = $mmgData->get($cursor, 0);
-                $results[] = [
+                $results[] = (object)[
                     'date' => $cursor,
                     'label' => date('d/m', strtotime($cursor)),
                     'occ' => $o,
                     'mmg' => $m,
                     'ecart_pct' => $o > 0 ? round(abs($m - $o) / $o * 100, 1) : 0,
-                    'alerte' => ($o > 0 && round(abs($m - $o) / $o * 100, 1) > 5)
                 ];
                 $cursor = date('Y-m-d', strtotime($cursor . ' +1 day'));
             }
-            return $results;
+            return collect($results);
         });
+
+        if ($granularite === 'day') {
+            $data = $this->applyOutlierDetection($data, 'occ');
+        }
+
+        return response()->json($data);
     }
+
 
     public function revenusParService(Request $request)
     {
@@ -652,7 +716,7 @@ class DashboardController extends Controller
 
         $cacheKey = "db_revenus_svc_v3_{$startDate}_{$endDate}_{$keyword}_{$granularite}";
 
-        return Cache::remember($cacheKey, 300, function() use ($startDate, $endDate, $keyword, $granularite) {
+        $data = Cache::remember($cacheKey, 300, function() use ($startDate, $endDate, $keyword, $granularite) {
             $query = DB::table('ra_t_occ_cdr_detail as o')
                 ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
                 ->where('o.start_date', '>=', $startDate)
@@ -664,18 +728,18 @@ class DashboardController extends Controller
 
             if ($granularite === 'hour') {
                 $expr = "o.start_date::text || ' ' || LPAD(o.start_hour::text, 2, '0') || ':00'";
-                $query->selectRaw("$expr as time_bucket, o.keyword, COALESCE(s.nom_service, o.keyword) as nom, SUM(o.charge_amount) as revenus")
-                      ->groupBy(DB::raw($expr), 'o.keyword', 'nom')
+                $query->selectRaw("$expr as time_bucket, COALESCE(NULLIF(o.keyword, ''), 'Autre/DATA') as svc_key, COALESCE(s.nom_service, NULLIF(o.keyword, ''), 'Autre/DATA') as nom, SUM(o.charge_amount) as revenus")
+                      ->groupBy(DB::raw($expr), 'svc_key', 'nom')
                       ->orderBy(DB::raw($expr));
             } elseif ($granularite === 'week') {
                 $expr = "to_char(o.start_date, 'IYYY-IW')";
-                $query->selectRaw("$expr as time_bucket, o.keyword, COALESCE(s.nom_service, o.keyword) as nom, SUM(o.charge_amount) as revenus")
-                      ->groupBy(DB::raw($expr), 'o.keyword', 'nom')
+                $query->selectRaw("$expr as time_bucket, COALESCE(NULLIF(o.keyword, ''), 'Autre/DATA') as svc_key, COALESCE(s.nom_service, NULLIF(o.keyword, ''), 'Autre/DATA') as nom, SUM(o.charge_amount) as revenus")
+                      ->groupBy(DB::raw($expr), 'svc_key', 'nom')
                       ->orderBy(DB::raw($expr));
             } else {
                 $expr = "o.start_date::text";
-                $query->selectRaw("$expr as time_bucket, o.keyword, COALESCE(s.nom_service, o.keyword) as nom, SUM(o.charge_amount) as revenus")
-                      ->groupBy(DB::raw($expr), 'o.keyword', 'nom')
+                $query->selectRaw("$expr as time_bucket, COALESCE(NULLIF(o.keyword, ''), 'Autre/DATA') as svc_key, COALESCE(s.nom_service, NULLIF(o.keyword, ''), 'Autre/DATA') as nom, SUM(o.charge_amount) as revenus")
+                      ->groupBy(DB::raw($expr), 'svc_key', 'nom')
                       ->orderBy(DB::raw($expr));
             }
 
@@ -699,22 +763,46 @@ class DashboardController extends Controller
                 ]);
             }
 
-            $grouped = [];
-            foreach ($data as $row) {
-                $bucket = $row->time_bucket;
-                if (!isset($grouped[$bucket])) {
-                    $grouped[$bucket] = [
-                        'date' => $bucket, 
-                        'label' => $formatLabel($bucket), 
-                        'total' => 0
-                    ];
+                $grouped = [];
+                foreach ($data as $row) {
+                    $bucket = $row->time_bucket;
+                    if (!isset($grouped[$bucket])) {
+                        $grouped[$bucket] = (object)[
+                            'date' => $bucket, 
+                            'label' => $formatLabel($bucket), 
+                            'total' => 0
+                        ];
+                    }
+                    $nom = $row->nom;
+                    // FIX: Sum revenues instead of overwriting
+                    $grouped[$bucket]->$nom = ($grouped[$bucket]->$nom ?? 0) + round($row->revenus, 2);
+                    $grouped[$bucket]->total += round($row->revenus, 2);
                 }
-                $grouped[$bucket][$row->nom] = round($row->revenus, 2);
-                $grouped[$bucket]['total'] += round($row->revenus, 2);
+                return collect(array_values($grouped));
+            });
+
+            if ($granularite === 'day') {
+                $data = $this->applyOutlierDetection($data, 'total');
+                
+                // Scale individual services proportionally if total is capped
+                $data->transform(function($item) {
+                    if (isset($item->is_outlier) && $item->is_outlier && $item->total > 0) {
+                        $ratio = $item->valeur_capped / $item->total;
+                        foreach ($item as $key => $val) {
+                            if (!in_array($key, ['date', 'label', 'total', 'is_outlier', 'z_score', 'valeur_capped'])) {
+                                if (is_numeric($val)) {
+                                    $item->$key = round($val * $ratio, 3);
+                                }
+                            }
+                        }
+                    }
+                    return $item;
+                });
             }
-            return array_values($grouped);
-        });
-    }
+
+            return response()->json($data);
+        }
+
 
     public function topServicesEnrichi(Request $request)
     {
@@ -737,14 +825,14 @@ class DashboardController extends Controller
                     ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
                     ->where('o.start_date', '>=', $s)
                     ->where('o.start_date', '<=', $e)
-                    ->selectRaw("o.keyword, COALESCE(s.nom_service, o.keyword) as nom, SUM(o.charge_amount) as revenus, COUNT(*) as nb_cdr, COUNT(DISTINCT o.a_msisdn) as nb_abonnes")
-                    ->groupBy('o.keyword', 'nom');
+                    ->selectRaw("COALESCE(NULLIF(o.keyword, ''), 'Autre/DATA') as svc_key, COALESCE(s.nom_service, NULLIF(o.keyword, ''), 'Autre/DATA') as nom, SUM(o.charge_amount) as revenus, COUNT(*) as nb_cdr, COUNT(DISTINCT o.a_msisdn) as nb_abonnes")
+                    ->groupBy('svc_key', 'nom');
                 
                 if ($orderBy === 'nb_cdr') $q->orderByDesc('nb_cdr');
                 elseif ($orderBy === 'nb_abonnes') $q->orderByDesc('nb_abonnes');
                 else $q->orderByDesc('revenus');
 
-                return $q->limit($limit)->get()->keyBy('keyword');
+                return $q->limit($limit)->get()->keyBy('svc_key');
             };
 
             $current = $fetchTop($startDate, $endDate);
@@ -815,5 +903,65 @@ class DashboardController extends Controller
             ->get();
 
         return response()->json($data);
+    }
+
+    public function revenusByPartner(Request $request)
+    {
+        $startDate = $request->get('start_date', now()->subDays(30)->toDateString());
+        $endDate = $request->get('end_date', now()->toDateString());
+
+        $data = DB::table('ra_t_occ_cdr_detail')
+            ->whereBetween('start_date', [$startDate, $endDate])
+            ->whereNotNull('partner')
+            ->selectRaw("partner, COUNT(*) as nb, SUM(charge_amount) as revenus")
+            ->groupBy('partner')
+            ->orderByDesc('revenus')
+            ->get();
+
+        return response()->json($data);
+    }
+    public function downloadReport($filename)
+    {
+        $path = storage_path("app/reports/{$filename}");
+        if (!file_exists($path)) abort(404);
+        return response()->download($path);
+    }
+
+    private function applyOutlierDetection($data, $key = 'total')
+    {
+        $collection = collect($data);
+        if ($collection->count() < 4) return $collection;
+
+        $values = $collection->pluck($key)->map(fn($v) => (float)$v)->sort()->values()->toArray();
+        $count = count($values);
+        
+        // Median
+        $middle = floor($count / 2);
+        $median = $count % 2 ? $values[$middle] : ($values[$middle - 1] + $values[$middle]) / 2;
+        
+        // Median Absolute Deviation (MAD)
+        $deviations = array_map(fn($v) => abs($v - $median), $values);
+        sort($deviations);
+        $mad = $count % 2 ? $deviations[$middle] : ($deviations[$middle - 1] + $deviations[$middle]) / 2;
+        
+        // Standardize MAD (constant 1.4826 for normal distribution consistency)
+        $stdDev = $mad * 1.4826 ?: 1; 
+
+        return $collection->transform(function ($item) use ($key, $median, $stdDev) {
+            $val = (float) ($item->$key ?? 0);
+            $zScore = abs($val - $median) / $stdDev;
+            
+            $item->is_outlier = $zScore > 3.0; // Robust Z-score threshold 3.0
+            $item->z_score = round($zScore, 2);
+            
+            // Capping at 4x Median for visual clarity if it's an extreme outlier
+            $capped = $item->is_outlier ? ($median + 3.0 * $stdDev) : $val;
+            if ($item->is_outlier && $capped > ($median * 4)) {
+                $capped = $median * 4;
+            }
+            $item->valeur_capped = round($capped, 3);
+            
+            return $item;
+        });
     }
 }

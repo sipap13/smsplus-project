@@ -458,6 +458,30 @@ export default function Import() {
               {uploading ? 'Envoi en cours…' : 'Lancer l\'import'}
             </button>
           </div>
+
+          <div className="surface surface-pad" style={{ marginBottom: '1.2rem' }}>
+            <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1.05rem', fontWeight: 700 }}>
+              Maintenance des données
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Si les graphiques du tableau de bord ou les alertes semblent obsolètes, vous pouvez forcer la mise à jour des agrégats.
+            </p>
+            <button
+              className="btn btn-ghost"
+              style={{ width: '100%', border: '1px solid var(--primary)', color: 'var(--primary)' }}
+              onClick={async () => {
+                try {
+                  await api.post('/etl/trigger-agg');
+                  alert('Mise à jour des agrégats lancée !');
+                } catch {
+                  alert('Échec du lancement.');
+                }
+              }}
+              type="button"
+            >
+              ⚙ Recalculer les agrégats
+            </button>
+          </div>
         </div>
 
         {/* ── COLONNE DROITE ── */}
@@ -482,7 +506,7 @@ export default function Import() {
 
             {/* ── ETL MONITORING ── */}
       <JobStatusBar
-        jobTypes={['import_occ_csv', 'import_occ_xlsx', 'import_mmg_csv', 'import_mmg_xlsx', 'etl_cdr_from_tmp', 'etl_agg_from_raw']}
+        jobTypes={['import_occ_csv', 'import_occ_xlsx', 'import_mmg_csv', 'import_mmg_xlsx', 'etl_cdr_from_tmp', 'etl_agg_from_raw', 'notifications_polling']}
         title="Traitements ETL"
         compact={false}
         refreshInterval={5000}

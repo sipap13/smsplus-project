@@ -340,4 +340,21 @@ class ServiceController extends Controller
             ]
         ]);
     }
+
+    public function mapping()
+    {
+        $services = DB::table('ra_t_services')
+            ->where('actif', true)
+            ->orderBy('nom_service')
+            ->get()
+            ->map(fn($s) => [
+                'keyword'         => $s->keyword,
+                'nom_service'     => $s->nom_service,
+                'nom_fournisseur' => $s->nom_fournisseur,
+                'nom_complet'     => $s->nom_service . ' (' . $s->keyword . ')',
+                'label'           => $s->nom_service . ' — ' . $s->nom_fournisseur,
+            ]);
+
+        return response()->json($services);
+    }
 }

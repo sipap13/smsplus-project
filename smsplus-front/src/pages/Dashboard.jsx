@@ -12,6 +12,7 @@ import JobStatusBar from '../components/JobStatusBar';
 import { usePeriode } from '../hooks/usePeriode';
 import { format, parseISO, differenceInDays, subDays } from 'date-fns';
 import { PieChart, Pie, Cell as PieCell } from 'recharts';
+import useServiceMapping from '../hooks/useServiceMapping';
 
 // --- Shared Components ---
 
@@ -147,14 +148,16 @@ const TrafficChart = ({ startDate, endDate, label }) => {
   };
 
   useEffect(() => {
-    // Auto granularity
+    // Auto granularity only if date range changes significantly
     const diff = differenceInDays(new Date(endDate), new Date(startDate));
     if (diff <= 2) setGranularity('hour');
     else if (diff >= 60) setGranularity('week');
     else setGranularity('day');
-    
-    fetchData();
   }, [startDate, endDate]);
+
+  useEffect(() => {
+    fetchData();
+  }, [startDate, endDate, granularity]);
 
   const stats = useMemo(() => {
     if (data.length === 0) return null;
@@ -170,29 +173,70 @@ const TrafficChart = ({ startDate, endDate, label }) => {
     if (active && payload && payload.length) {
       const d = payload[0].payload;
       return (
-        <div className="surface" style={{ background: 'var(--bg-elevated)', padding: '10px', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', color: 'var(--text-main)' }}>
-          <p style={{ margin: '0 0 8px', fontWeight: 600 }}>📅 {d.date}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>MMG :</span>
-              <span style={{ fontWeight: 700 }}>{formatCompactNumber(d.mmg)} CDR</span>
+        <div style={{
+          background: '#0f172a',
+          color: '#f1f5f9',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          fontSize: '12px',
+          lineHeight: '1.8',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+          border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b'
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+            📅 {d.label}
+          </div>
+          
+          {d.is_outlier && (
+            <div style={{ color: '#fbbf24', marginBottom: '6px', fontSize: '11px', fontWeight: 600 }}>
+              ⚠ Valeur exceptionnelle (z-score = {d.z_score})
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>OCC :</span>
-              <span style={{ fontWeight: 700, color: d.ecart_pct > 5 ? '#ef4444' : 'var(--text-main)' }}>{formatCompactNumber(d.occ)} CDR</span>
+          )}
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
+            <span style={{ color: '#94a3b8' }}>MMG :</span>
+            <span style={{ fontWeight: 700 }}>{formatCompactNumber(d.mmg)} CDR</span>
+          </div>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
+            <span style={{ color: '#94a3b8' }}>OCC :</span>
+            <span style={{ fontWeight: 700, color: d.is_outlier ? '#fbbf24' : '#6366f1' }}>
+              {formatCompactNumber(d.occ)} CDR
+            </span>
+          </div>
+
+          {d.is_outlier && (
+            <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>
+              Affiché plafonné à : {formatCompactNumber(d.valeur_capped)} CDR
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', borderTop: '1px solid var(--border)', paddingTop: '4px', marginTop: '4px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Écart :</span>
-              <span style={{ fontWeight: 700, color: d.ecart_pct > 5 ? '#ef4444' : '#10b981' }}>
-                {d.ecart_pct > 5 ? '⚠' : '✓'} {d.ecart_pct}%
-              </span>
-            </div>
+          )}
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', borderTop: '1px solid #1e293b', paddingTop: '4px', marginTop: '4px' }}>
+            <span style={{ color: '#94a3b8' }}>Écart :</span>
+            <span style={{ fontWeight: 700, color: d.ecart_pct > 5 ? '#ef4444' : '#10b981' }}>
+              {d.ecart_pct > 5 ? '⚠' : '✓'} {d.ecart_pct}%
+            </span>
           </div>
         </div>
       );
     }
     return null;
   };
+
+  const renderCustomBar = (props) => {
+    const { x, y, width, height, is_outlier, fill } = props;
+    if (is_outlier) {
+      return (
+        <g>
+          <rect x={x} y={y} width={width} height={height} fill={fill} opacity={0.7} />
+          <line x1={x} y1={y} x2={x + width} y2={y} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 2" />
+          <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10} fill="#f59e0b">▲</text>
+        </g>
+      );
+    }
+    return <rect x={x} y={y} width={width} height={height} fill={fill} />;
+  };
+
 
   return (
     <div className="surface surface-pad" style={{ marginBottom: '1.2rem', position: 'relative' }}>
@@ -234,7 +278,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
       </div>
 
       <div style={{ width: '100%', height: 350 }}>
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <ComposedChart key={granularity} data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
@@ -244,12 +288,13 @@ const TrafficChart = ({ startDate, endDate, label }) => {
             
             {options.mmg && <Bar dataKey="mmg" name="MMG" fill="#1e2f74" radius={[4, 4, 0, 0]} maxBarSize={30} />}
             {options.occ && (
-              <Bar dataKey="occ" name="OCC" radius={[4, 4, 0, 0]} maxBarSize={30}>
+              <Bar dataKey="valeur_capped" name="OCC" radius={[4, 4, 0, 0]} maxBarSize={30} shape={renderCustomBar}>
                 {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.ecart_pct > 5 ? '#ef4444' : '#6366f1'} />
+                  <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : (entry.ecart_pct > 5 ? '#ef4444' : '#6366f1')} />
                 ))}
               </Bar>
             )}
+
             
             {options.ecart && <Line type="monotone" dataKey="ecart_pct" name="Écart %" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />}
             {options.moyenne && stats && (
@@ -274,11 +319,8 @@ const RevenusChart = ({ startDate, endDate }) => {
   const [loading, setLoading] = useState(true);
   const [service, setService] = useState('all');
   const [granularite, setGranularity] = useState('day');
-  const [servicesList, setServicesList] = useState([]);
-
-  useEffect(() => {
-    api.get('/services').then(res => setServicesList(res.data));
-  }, []);
+  
+  const { services: mappedServices } = useServiceMapping();
 
   const fetchData = async () => {
     setLoading(true);
@@ -312,7 +354,7 @@ const RevenusChart = ({ startDate, endDate }) => {
 
   return (
     <div className="surface surface-pad" style={{ marginBottom: '1.2rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-      <CardHeader title="Revenus par service" subtitle={`Analyse des revenus (DT)`}>
+      <CardHeader title="Revenus par service" subtitle={`Analyse des revenus (DT) · ${startDate} au ${endDate}`}>
         <select 
           className="select-sm" 
           value={service} 
@@ -320,7 +362,7 @@ const RevenusChart = ({ startDate, endDate }) => {
           style={{ height: '32px', borderRadius: '6px', border: '1px solid var(--border)', padding: '0 8px', fontSize: '13px', background: 'var(--bg-surface)', color: 'var(--text-main)' }}
         >
           <option value="all">Tous les services</option>
-          {servicesList.map(s => <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>)}
+          {mappedServices.map(s => <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>)}
         </select>
         <select 
           className="select-sm" 
@@ -342,7 +384,7 @@ const RevenusChart = ({ startDate, endDate }) => {
       </div>
 
       <div style={{ width: '100%', height: 350 }}>
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <AreaChart key={`${granularite}-${service}`} data={data}>
             <defs>
               {colors.map((c, i) => (
@@ -356,18 +398,35 @@ const RevenusChart = ({ startDate, endDate }) => {
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
             <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatDT} />
             <Tooltip 
-              contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
-              itemStyle={{ fontSize: '13px' }}
+               content={({ active, payload, label }) => {
+                if (active && payload && payload.length) {
+                  const d = payload[0].payload;
+                  return (
+                    <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b' }}>
+                      <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {label}</div>
+                      {d.is_outlier && <div style={{ color: '#fbbf24', fontSize: '11px', marginBottom: '4px' }}>⚠ Valeur exceptionnelle (z-score = {d.z_score})</div>}
+                      {payload.map((p, i) => (
+                        <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
+                          <span>{p.name}:</span>
+                          <span style={{ fontWeight: 700 }}>{formatDT(p.value)}</span>
+                        </div>
+                      ))}
+                      {d.is_outlier && <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>Plafonné à : {formatDT(d.valeur_capped)}</div>}
+                    </div>
+                  );
+                }
+                return null;
+              }}
             />
             <Legend />
             
             {service === 'all' ? (
-              // Find all keys except date and label
-              Object.keys(data[0] || {}).filter(k => !['date', 'label', 'total'].includes(k)).map((k, i) => (
+              Object.keys(data[0] || {}).filter(k => !['date', 'label', 'total', 'is_outlier', 'z_score', 'valeur_capped'].includes(k)).map((k, i) => (
                 <Area 
                   key={k} 
                   type="monotone" 
-                  dataKey={k} 
+                  dataKey={k === 'total' ? 'valeur_capped' : k} 
+                  name={k === 'total' ? 'Revenus total' : k}
                   stackId="1" 
                   stroke={colors[i % colors.length]} 
                   fill={`url(#color-${i % colors.length})`} 
@@ -376,16 +435,24 @@ const RevenusChart = ({ startDate, endDate }) => {
             ) : (
               <Area 
                 type="monotone" 
-                dataKey="revenus" 
+                dataKey="valeur_capped" 
+                name="Revenus"
                 stroke="#6366f1" 
                 fill="url(#color-0)" 
                 strokeWidth={3}
-                dot={{ r: 4 }}
+                dot={(props) => {
+                  const { cx, cy, payload } = props;
+                  if (payload.is_outlier) {
+                    return <circle cx={cx} cy={cy} r={6} fill="#f59e0b" stroke="#fff" strokeWidth={2} />;
+                  }
+                  return <circle cx={cx} cy={cy} r={4} fill="#6366f1" />;
+                }}
                 activeDot={{ r: 6 }}
               />
             )}
             <Brush dataKey="label" height={30} stroke="var(--border)" fill="var(--bg-surface)" />
           </AreaChart>
+
         </ResponsiveContainer>
       </div>
     </div>
@@ -515,7 +582,7 @@ const SubscriberDistribution = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Répartition par offre" subtitle="PREPAID vs HYBRID" />
       <div style={{ height: '220px', minHeight: '220px', display: 'flex', alignItems: 'center' }}>
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <PieChart>
             <Pie
               data={data}
@@ -604,7 +671,7 @@ const HourlyActivityChart = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Activité par heure" subtitle="Volume CDR moyen par heure de la journée" />
       <div style={{ height: '200px', minHeight: '200px' }}>
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="hour" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
@@ -694,7 +761,7 @@ const RoamingDistribution = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Local vs Roaming" subtitle="Volume CDR par type de connexion" />
       <div style={{ height: '220px', minHeight: '220px' }}>
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <PieChart>
             <Pie
               data={data}
@@ -770,7 +837,7 @@ const ComparisonChart = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ marginBottom: '24px', border: '1px solid var(--primary)', background: 'var(--bg-surface)' }}>
        <CardHeader title="⇄ Comparaison de tendances" subtitle="Superposition de la période actuelle (Bleu) vs précédente (Gris)" />
        <div style={{ height: '300px', width: '100%' }}>
-          <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <AreaChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
@@ -791,6 +858,75 @@ const ComparisonChart = ({ startDate, endDate }) => {
 export default function Dashboard({ user }) {
   const { periode, setPreset, setCustom, setPeriode } = usePeriode();
   const [compare, setCompare] = useState(false);
+  const [showOutliers, setShowOutliers] = useState(true);
+  const [outlierStats, setOutlierStats] = useState(null);
+
+
+  // Banner component for outliers
+  const OutlierBanner = ({ outliers }) => {
+    if (!outliers || outliers.length === 0 || !showOutliers) return null;
+    return (
+      <div style={{
+        background: '#fffbeb',
+        border: '1px solid #fde68a',
+        borderRadius: '12px',
+        padding: '12px 20px',
+        marginBottom: '24px',
+        fontSize: '14px',
+        color: '#92400e',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 2px 4px rgba(251, 191, 36, 0.1)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '20px' }}>⚠️</span>
+          <span>
+            <strong>Valeurs exceptionnelles détectées :</strong> le {outliers.join(', ')}. 
+            Les graphiques ont été plafonnés pour maintenir une lisibilité optimale. 
+            Survolez les indicateurs ⚠️ pour voir les valeurs réelles.
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {outliers.includes('2026-04-15') && (
+            <button
+              onClick={() => window.open(`${api.defaults.baseURL}/dashboard/download-report/correction_15042026.txt`, '_blank')}
+              style={{
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              📥 Télécharger Rapport Correction
+            </button>
+          )}
+          <button
+            onClick={() => setShowOutliers(false)}
+            style={{
+              background: '#d97706',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'background 0.2s'
+            }}
+          >
+            Masquer l'alerte
+          </button>
+        </div>
+      </div>
+    );
+  };
+
 
   useEffect(() => {
     // On mount, check if current period has data. If empty, adjust to max available date.
@@ -810,8 +946,19 @@ export default function Dashboard({ user }) {
         }
       } catch (err) { console.error(err); }
     };
+
     checkRange();
-  }, []);
+
+    // Fetch global stats for outlier detection
+    const fetchOutliers = async () => {
+      try {
+        const res = await api.get(`/dashboard/revenus-enrichi?days=30`);
+        if (res.data.stats) setOutlierStats(res.data.stats);
+      } catch (err) { console.error(err); }
+    };
+    fetchOutliers();
+  }, [periode]);
+
 
   return (
     <div className="page" style={{ padding: '1rem', backgroundColor: 'var(--bg-page)', minHeight: '100vh' }}>
@@ -834,6 +981,9 @@ export default function Dashboard({ user }) {
         setPreset={setPreset} 
         setCustom={setCustom} 
       />
+
+      <OutlierBanner outliers={outlierStats?.outliers} />
+
 
       {compare && <ComparisonChart startDate={periode.startDate} endDate={periode.endDate} />}
 
@@ -872,7 +1022,7 @@ export default function Dashboard({ user }) {
 
       <div style={{ marginTop: '32px' }}>
         <JobStatusBar
-          jobTypes={['import_occ_csv', 'import_mmg_csv', 'etl_cdr_from_tmp', 'etl_agg_from_raw']}
+          jobTypes={['import_occ_csv', 'import_mmg_csv', 'etl_cdr_from_tmp', 'etl_agg_from_raw', 'dashboard_stats_load', 'dashboard_revenus_chart', 'notifications_load', 'notifications_polling']}
           title="Traitements système aujourd'hui"
           compact={false}
           refreshInterval={15000}

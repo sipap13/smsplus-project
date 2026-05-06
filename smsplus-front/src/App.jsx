@@ -22,6 +22,8 @@ import Notifications from './pages/Notifications';
 import Duplicates from './pages/Duplicates';
 import AuditLog from './pages/AuditLog';
 import DataCoverage from './pages/DataCoverage';
+import DataLineage from './pages/DataLineage';
+import EtlPerformance from './pages/EtlPerformance';
 import { fetchNotificationCount } from './api/notifications';
 import ToastContainer from './components/ToastContainer';
 
@@ -240,7 +242,7 @@ function AppRoutes() {
         <Route
           path="/imports"
           element={(
-            <RoleGuard user={user} roles={['ADMIN']}>
+            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
               <Import />
             </RoleGuard>
           )}
@@ -250,6 +252,18 @@ function AppRoutes() {
           element={(
             <RoleGuard user={user} roles={['ADMIN']}>
               <DataCoverage />
+            </RoleGuard>
+          )}
+        />
+        <Route
+          path="/data-lineage"
+          element={<DataLineage />}
+        />
+        <Route
+          path="/etl-performance"
+          element={(
+            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+              <EtlPerformance />
             </RoleGuard>
           )}
         />

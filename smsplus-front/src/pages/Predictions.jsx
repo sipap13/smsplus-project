@@ -8,6 +8,7 @@ import {
   RadialBarChart, RadialBar,
 } from 'recharts';
 import { formatDT, formatCompactNumber } from '../lib/format';
+import useServiceMapping from '../hooks/useServiceMapping';
 import JobStatusBar from '../components/JobStatusBar';
 
 const C_HISTO = '#3b82f6';
@@ -234,6 +235,8 @@ export default function Predictions() {
   const [aiModel, setAiModel] = useState(null);
   const [providerInfo, setProviderInfo] = useState(null);
 
+  const { services: mappedServices, getNom } = useServiceMapping();
+
   const load = useCallback(async (isManualRefresh = false) => {
     setLoading(true); setError('');
     try {
@@ -321,7 +324,7 @@ export default function Predictions() {
     { title: `Total predit ${horizon}j`, value: resume.total_predit ? formatDT(resume.total_predit) : '—', sub: resume.comparaison_semaine_precedente_pct !== undefined ? <span style={{ color: resume.comparaison_semaine_precedente_pct >= 0 ? '#16a34a' : '#dc2626' }}>{resume.comparaison_semaine_precedente_pct >= 0 ? '↑' : '↓'} {Math.abs(resume.comparaison_semaine_precedente_pct).toFixed(1)}% vs sem. prec.</span> : null, color: '#8b5cf6' },
     { title: 'Meilleur jour predit', value: resume.meilleur_jour ? formatDT(resume.meilleur_jour.montant) : '—', sub: resume.meilleur_jour ? `${JOURS_SHORT[new Date(resume.meilleur_jour.date).getDay()]} ${resume.meilleur_jour.date.slice(8)}/${resume.meilleur_jour.date.slice(5, 7)}` : null, color: '#16a34a' },
     { title: 'Pire jour predit', value: resume.pire_jour ? formatDT(resume.pire_jour.montant) : '—', sub: resume.pire_jour ? `${JOURS_SHORT[new Date(resume.pire_jour.date).getDay()]} ${resume.pire_jour.date.slice(8)}/${resume.pire_jour.date.slice(5, 7)}` : null, color: '#dc2626' },
-      { title: 'Score fiabilite IA', value: <div style={{ width: 80, height: 80 }}><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}><RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="90%" data={[{ name: 'Score', value: score, fill: score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#dc2626' }]}><RadialBar dataKey="value" background clockWise /></RadialBarChart></ResponsiveContainer></div>, sub: <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Fiabilite IA</span>, color: '#f59e0b' },
+      { title: 'Score fiabilite IA', value: <div style={{ width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><RadialBarChart width={80} height={80} cx="50%" cy="50%" innerRadius="60%" outerRadius="90%" data={[{ name: 'Score', value: score, fill: score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#dc2626' }]}><RadialBar dataKey="value" background clockWise /></RadialBarChart></div>, sub: <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Fiabilite IA</span>, color: '#f59e0b' },
     { title: 'Volatilite historique', value: metriques.volatilite !== undefined ? `${metriques.volatilite}%` : '—', sub: metriques.volatilite !== undefined ? <VolatilityBadge vol={metriques.volatilite} /> : null, color: '#06b6d4' },
   ];
 
@@ -423,8 +426,8 @@ export default function Predictions() {
             <span className="field-label">Service</span>
             <select className="field-control" value={keywordFilter} onChange={e => setKeywordFilter(e.target.value)}>
               <option value="">Tous les services</option>
-              {services.map(s => (
-                <option key={s.keyword} value={s.keyword}>{s.keyword} &middot; {s.nom_service}</option>
+              {mappedServices.map(s => (
+                <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>
               ))}
             </select>
           </div>
@@ -465,7 +468,7 @@ export default function Predictions() {
       <FadeSection>
         <div className="surface surface-pad" style={{ marginBottom: '1.2rem' }}>
           <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Historique &amp; Predictions</h3>
-          <div style={{ width: '100%', height: 320 }}>
+          <div style={{ width: '100%', height: 320, minHeight: 320 }}>
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />

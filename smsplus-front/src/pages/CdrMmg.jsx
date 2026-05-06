@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import JobStatusBar from '../components/JobStatusBar';
+import useServiceMapping from '../hooks/useServiceMapping';
+import { formatDT } from '../lib/format';
 
 const PER_PAGE = 50;
 
@@ -30,6 +32,8 @@ export default function CdrMmg() {
 
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
+
+  const { getNom } = useServiceMapping();
 
   const loadOptions = useCallback(() => {
     api
@@ -215,7 +219,7 @@ export default function CdrMmg() {
         
         {/* Job Status Dropdown */}
         <JobStatusBar
-          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_mmg_csv']}
+          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_mmg_csv', 'notifications_polling']}
           title=""
           compact={false}
           refreshInterval={10000}
@@ -259,7 +263,16 @@ export default function CdrMmg() {
                   <tr key={row.id}>
                     {cols.map((c) => (
                       <td key={c.key} data-label={c.label} className={c.key.includes('msisdn') ? 'mono' : ''} style={{ padding: '0.55rem 0.75rem', fontSize: '0.82rem', color: 'var(--text-main)' }}>
-                        {row[c.key] ?? '—'}
+                        {c.key === 'service_type' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                              {getNom(row.service_type)}
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                              {row.service_type}
+                            </span>
+                          </div>
+                        ) : (row[c.key] ?? '—')}
                       </td>
                     ))}
                   </tr>

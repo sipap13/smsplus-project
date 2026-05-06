@@ -4,6 +4,7 @@ import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import Modal from '../components/Modal';
 import JobStatusBar from '../components/JobStatusBar';
+import useServiceMapping from '../hooks/useServiceMapping';
 
 const emptyAlertForm = () => ({
   start_date: new Date().toISOString().slice(0, 10),
@@ -33,6 +34,8 @@ export default function Alerts() {
   const [saving, setSaving] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
+
+  const { getNom, services: mappedServices } = useServiceMapping();
 
   const load = () => {
     setLoading(true);
@@ -375,8 +378,15 @@ export default function Alerts() {
                   const isFlag = !!it.flag;
                   return (
                     <tr key={it.service_key}>
-                      <td style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border)', color: 'var(--text-main)', fontWeight: 700 }}>
-                        {it.service_key}
+                      <td style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border)', color: 'var(--text-main)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '13px' }}>
+                            {it.nom_service || getNom(it.service_key)}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                            {it.service_key}
+                          </span>
+                        </div>
                       </td>
                       <td style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border)', color: 'var(--text-main)' }}>
                         {it.vol_curr}
@@ -437,11 +447,37 @@ export default function Alerts() {
                 style={{ width: '100%', padding: '0.65rem', boxSizing: 'border-box' }}
               />
             </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                Sélectionner un service
+              </label>
+              <select
+                className="field-control"
+                value={form.keyword || ''}
+                onChange={(e) => {
+                  const kw = e.target.value;
+                  const s = mappedServices.find(x => x.keyword === kw);
+                  if (s) {
+                    setForm({
+                      ...form,
+                      keyword: s.keyword,
+                      nom_service: s.nom_service,
+                      nom_fournisseur: s.nom_fournisseur,
+                    });
+                  } else {
+                    setForm({ ...form, keyword: '', nom_service: '', nom_fournisseur: '' });
+                  }
+                }}
+                style={{ width: '100%', padding: '0.65rem', boxSizing: 'border-box' }}
+              >
+                <option value="">-- Choisir --</option>
+                {mappedServices.map(s => (
+                  <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>
+                ))}
+              </select>
+            </div>
             {[
-              { key: 'nom_service', label: 'Nom service' },
               { key: 'numero_court', label: 'N° court' },
-              { key: 'keyword', label: 'Keyword' },
-              { key: 'nom_fournisseur', label: 'Fournisseur' },
               { key: 'seuil_pct', label: 'Seuil %', type: 'number' },
               { key: 'count_nb_sms', label: 'Nb SMS', type: 'number' },
             ].map((f) => (
@@ -457,6 +493,14 @@ export default function Alerts() {
                 />
               </div>
             ))}
+          </div>
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            {form.keyword && (
+              <>
+                <span>Keyword: <strong>{form.keyword}</strong></span>
+                <span>Fournisseur: <strong>{form.nom_fournisseur}</strong></span>
+              </>
+            )}
           </div>
           <div style={{ marginTop: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-main)' }}>
@@ -527,8 +571,15 @@ export default function Alerts() {
                     <td data-label="Date" style={{ padding: '0.75rem 1rem', color: 'var(--text-main)' }}>
                       {alert.start_date}
                     </td>
-                    <td data-label="Service" style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                      {alert.nom_service || '—'}
+                    <td data-label="Service" style={{ padding: '0.75rem 1rem', color: 'var(--text-main)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                          {alert.nom_service || getNom(alert.keyword)}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                          {alert.keyword || '—'}
+                        </span>
+                      </div>
                     </td>
                     <td data-label="Keyword" style={{ padding: '0.75rem 1rem' }}>
                       {alert.keyword ? <span className="chip">{alert.keyword}</span> : '—'}
