@@ -110,21 +110,20 @@ export default function Users({ user: currentUser }) {
   };
 
   return (
-    <div className="page">
-      <div className="page-header">
+    <div className="page" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Gestion des utilisateurs</h1>
-          <p className="page-subtitle">{users.length} utilisateur(s) — réservé aux administrateurs</p>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Gestion des Utilisateurs</h1>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>{users.length} utilisateurs</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>{users.filter(u => u.actif).length} actifs</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}>{users.filter(u => u.role === 'ADMIN').length} admins</span>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setForm(emptyUserForm());
-            setShowForm(true);
-          }}
-          className="btn btn-primary"
-        >
-          Ajouter un utilisateur
+        <button type="button" onClick={() => { setForm(emptyUserForm()); setShowForm(true); }} className="btn btn-primary" style={{ height: '40px', fontWeight: 600 }}>
+          + Ajouter un utilisateur
         </button>
       </div>
 
@@ -208,78 +207,55 @@ export default function Users({ user: currentUser }) {
       )}
 
       {loading ? (
-        <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>Chargement...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><div className="spinner" /></div>
       ) : (
-        <div className="panel table-wrap" style={{ overflow: 'auto' }}>
-          <table className="table-mobile table-dense table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr>
-                {['ID', 'Nom', 'Email', 'Numéro personnel', 'Rôle', 'Actif', 'Dernière connexion', 'Créé le'].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: '0.85rem 1rem',
-                      textAlign: 'left',
-                      fontSize: '0.82rem',
-                      color: 'var(--text-muted)',
-                      fontWeight: 600,
-                      borderBottom: '2px solid var(--border)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {h}
-                  </th>
+              <tr style={{ background: 'var(--bg-surface)' }}>
+                {['', 'Nom', 'Email', 'N° Personnel', 'Rôle', 'Statut', 'Dernière connexion', 'Créé le'].map(h => (
+                  <th key={h} style={{ padding: '0.7rem 1rem', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td data-label="ID" className="mono" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
-                    {fmtId(u.id)}
-                  </td>
-                  <td data-label="Nom" style={{ padding: '0.75rem 1rem', color: 'var(--text-main)', fontWeight: 600 }}>
-                    {u.nom || '—'}
-                  </td>
-                  <td data-label="Email" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
-                    {u.email}
-                  </td>
-                  <td data-label="Numéro personnel" className="mono" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
-                    {u.numero_personnel || '—'}
-                  </td>
-                  <td data-label="Rôle" style={{ padding: '0.75rem 1rem' }}>
-                    <select
-                      value={u.role}
-                      onChange={(e) => changeRole(u, e.target.value)}
-                      disabled={busyId === u.id}
-                      className="role-select"
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {fmtRole(r)}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td data-label="Actif" style={{ padding: '0.75rem 1rem' }}>
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={!!u.actif}
-                        disabled={busyId === u.id || (u.id === myId && u.actif)}
-                        onChange={() => toggleActive(u)}
-                      />
-                      Actif
-                    </label>
-                  </td>
-                  <td data-label="Dernière connexion" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                    {fmtDT(u.last_login_at)}
-                  </td>
-                  <td data-label="Créé le" style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                    {u.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'}
-                  </td>
-                </tr>
-              ))}
+              {users.map(u => {
+                const roleColors = { ADMIN: '#ef4444', ANALYSTE_OP: '#f59e0b', ANALYSTE_BUSS: '#10b981' };
+                const rColor = roleColors[u.role] || '#64748b';
+                const initials = (u.nom || u.email || '?').slice(0, 2).toUpperCase();
+                const avatarColors = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+                const aColor = avatarColors[(u.id || 0) % avatarColors.length];
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <td style={{ padding: '0.7rem 1rem' }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: aColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem' }}>{initials}</div>
+                    </td>
+                    <td style={{ padding: '0.7rem 1rem', fontWeight: 600, color: 'var(--text-main)' }}>{u.nom || '—'}</td>
+                    <td style={{ padding: '0.7rem 1rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>{u.email}</td>
+                    <td style={{ padding: '0.7rem 1rem', fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{u.numero_personnel || '—'}</td>
+                    <td style={{ padding: '0.7rem 1rem' }}>
+                      <select value={u.role} onChange={e => changeRole(u, e.target.value)} disabled={busyId === u.id}
+                        style={{ border: `1px solid ${rColor}40`, borderRadius: '8px', padding: '4px 8px', fontSize: '0.78rem', fontWeight: 700, color: rColor, background: `${rColor}10`, cursor: 'pointer' }}>
+                        {ROLES.map(r => <option key={r} value={r}>{fmtRole(r)}</option>)}
+                      </select>
+                    </td>
+                    <td style={{ padding: '0.7rem 1rem' }}>
+                      <button onClick={() => toggleActive(u)} disabled={busyId === u.id || (u.id === myId && u.actif)}
+                        style={{ padding: '3px 12px', borderRadius: '99px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', border: 'none',
+                          background: u.actif ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.1)',
+                          color: u.actif ? '#10b981' : '#ef4444'
+                        }}>
+                        {u.actif ? 'Actif' : 'Inactif'}
+                      </button>
+                    </td>
+                    <td style={{ padding: '0.7rem 1rem', color: 'var(--text-muted)', fontSize: '0.78rem', fontFamily: 'monospace' }}>{fmtDT(u.last_login_at)}</td>
+                    <td style={{ padding: '0.7rem 1rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{u.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

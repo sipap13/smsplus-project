@@ -248,6 +248,11 @@ class DashboardController extends Controller
         $anchorDate = $maxDate ?: now()->toDateString();
         $effectiveDate = is_string($date) && trim($date) !== '' ? trim($date) : $anchorDate;
 
+        // If effective date is in the future relative to max date, cap it to max date
+        if ($maxDate && $effectiveDate > $maxDate) {
+            $effectiveDate = $maxDate;
+        }
+
         $cacheKey = 'dashboard_revenus_smsplus_'.($includeData ? 'with_data' : 'no_data')."_{$granularity}_{$effectiveDate}_{$days}_{$limit}";
 
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
@@ -698,9 +703,8 @@ class DashboardController extends Controller
             return collect($results);
         });
 
-        if ($granularite === 'day') {
-            $data = $this->applyOutlierDetection($data, 'occ');
-        }
+        // Always apply outlier detection to ensure valeur_capped exists for the frontend chart
+        $data = $this->applyOutlierDetection($data, 'occ');
 
         return response()->json($data);
     }
@@ -709,10 +713,15 @@ class DashboardController extends Controller
     public function revenusParService(Request $request)
     {
         $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date') ?: now()->toDateString();
-        $startDate = $request->query('start_date', date('Y-m-d', strtotime($maxDate . ' -7 days')));
         $endDate = $request->query('end_date', $maxDate);
+        $startDate = $request->query('start_date', date('Y-m-d', strtotime($endDate . ' -7 days')));
         $keyword = $request->query('keyword');
         $granularite = $request->query('granularite', 'day');
+
+        // Safety check: if startDate is beyond endDate, reset
+        if ($startDate > $endDate) {
+            $startDate = date('Y-m-d', strtotime($endDate . ' -7 days'));
+        }
 
         $cacheKey = "db_revenus_svc_v3_{$startDate}_{$endDate}_{$keyword}_{$granularite}";
 
@@ -948,6 +957,7 @@ class DashboardController extends Controller
         $stdDev = $mad * 1.4826 ?: 1; 
 
         return $collection->transform(function ($item) use ($key, $median, $stdDev) {
+            $item = (object) $item;
             $val = (float) ($item->$key ?? 0);
             $zScore = abs($val - $median) / $stdDev;
             

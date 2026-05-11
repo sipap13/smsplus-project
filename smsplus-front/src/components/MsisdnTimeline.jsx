@@ -164,7 +164,7 @@ export default function MsisdnTimeline({ data }) {
                         <span className={"source-badge " + (ev.source === "OCC" ? "occ" : "mmg")}>{ev.source}</span>
                         <strong>{ev.service}</strong>
                         {ev.montant > 0 && <span> - {formatDT(ev.montant)}</span>}
-                        {ev.destinataire && <span> -> {ev.destinataire}</span>}
+                        {ev.destinataire && <span> -&gt; {ev.destinataire}</span>}
                         {ev.doublon && <span className="badge badge-warn">Doublon</span>}
                       </div>
                     </div>

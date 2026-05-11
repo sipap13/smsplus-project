@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import api from '../api/axios';
 import { formatDT } from '../lib/format';
 import useServiceMapping from '../hooks/useServiceMapping';
@@ -78,7 +78,7 @@ export default function Duplicates() {
   const [stats, setStats] = useState(null);
   const [results, setResults] = useState([]);
   const [source, setSource] = useState('occ');
-  const [dateDebut, setDateDebut] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [dateDebut, setDateDebut] = useState('');
   const [minOccurrences, setMinOccurrences] = useState(2);
   const [keyword, setKeyword] = useState('');
   const [callType, setCallType] = useState('VAS');
@@ -93,12 +93,32 @@ export default function Duplicates() {
     try {
       const res = await api.get(`/duplicates/stats?date_debut=${dateDebut}`);
       setStats(res.data);
+      if (!dateDebut && res.data.date_debut_effective) {
+        setDateDebut(res.data.date_debut_effective);
+      }
     } catch (err) {
       console.error("Failed to fetch duplicate stats", err);
     } finally {
       setStatsLoading(false);
     }
   }, [dateDebut]);
+
+  useEffect(() => {
+    const syncDate = async () => {
+      try {
+        const res = await api.get('/dashboard/range');
+        const maxDate = res.data.max_date;
+        if (maxDate && (!dateDebut || new Date(dateDebut) > new Date(maxDate))) {
+          // If no date or date is in the future relative to data, set to 30 days before maxDate
+          const suggestedDate = new Date(new Date(maxDate).getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          setDateDebut(suggestedDate);
+        }
+      } catch (err) {
+        console.error("Failed to sync date range", err);
+      }
+    };
+    syncDate();
+  }, []);
 
   const fetchResults = async () => {
     setLoading(true);
@@ -219,8 +239,8 @@ export default function Duplicates() {
         />
         <KPICard 
           title="Taux de duplication"
-          value={stats ? ((stats.total_affected / 100000) * 100).toFixed(2) + '%' : '0.00%'}
-          subValue="Basé sur l'échantillon analysé"
+          value={stats && stats.total_sample_count > 0 ? ((stats.total_affected / stats.total_sample_count) * 100).toFixed(2) + '%' : '0.00%'}
+          subValue={stats ? `Basé sur ${stats.total_sample_count.toLocaleString()} CDR` : "Basé sur l'échantillon analysé"}
           icon={Icons.Users}
           color="#10b981"
           loading={statsLoading}
@@ -229,9 +249,16 @@ export default function Duplicates() {
 
       {/* SECTION 2 — Filtres */}
       <div className="saas-surface" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <Icons.Filter size={20} color="var(--primary-1)" />
-          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Paramètres d'analyse</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Icons.Filter size={20} color="var(--primary-1)" />
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Paramètres d'analyse</h3>
+          </div>
+          {stats?.date_debut_effective && (
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(var(--primary-rgb), 0.05)', padding: '4px 12px', borderRadius: '99px', border: '1px solid var(--border)' }}>
+              Analyse du <strong>{new Date(stats.date_debut_effective).toLocaleDateString()}</strong> au <strong>Aujourd'hui</strong>
+            </div>
+          )}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
           <div className="field">
@@ -330,7 +357,7 @@ export default function Duplicates() {
                   </tr>
                 ) : (
                   results.map((row, idx) => (
-                    <>
+                    <Fragment key={idx}>
                       <tr key={idx} style={{ background: expandedRows.has(idx) ? 'rgba(var(--primary-rgb), 0.05)' : 'transparent' }}>
                         <td style={{ padding: '0.75rem' }}>
                           <button onClick={() => toggleRow(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
@@ -391,7 +418,7 @@ export default function Duplicates() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))
                 )}
               </tbody>
@@ -404,7 +431,7 @@ export default function Duplicates() {
           <div className="saas-surface" style={{ padding: '1.5rem', borderRadius: '16px', flex: 1 }}>
             <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem', fontWeight: 700 }}>Répartition par Service</h3>
             <div style={{ height: '220px' }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
                 <PieChart>
                   <Pie
                     data={stats?.top_services?.map((s, i) => ({ name: getNom(s.keyword), value: Number(s.count) })) || []}
@@ -429,7 +456,7 @@ export default function Duplicates() {
           <div className="saas-surface" style={{ padding: '1.5rem', borderRadius: '16px', flex: 1 }}>
             <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1rem', fontWeight: 700 }}>Doublons par Date</h3>
             <div style={{ height: '220px' }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
                 <BarChart data={stats?.by_date || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis 
@@ -474,7 +501,7 @@ export default function Duplicates() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button className="btn" style={{ background: 'white', border: '1px solid #10b981', color: '#10b981', fontSize: '0.85rem' }}>
+            <button className="btn btn-ghost" style={{ border: '1px solid #10b981', color: '#10b981', fontSize: '0.85rem' }}>
               <Icons.Download size={16} style={{ marginRight: '6px' }} />
               Télécharger
             </button>

@@ -41,11 +41,6 @@ function SidebarIcon({ name }) {
       <svg {...common}><path d="M3 3v18h18" /><path d="M7 16l4-6 4 3 5-8" /></svg>
     );
   }
-  if (name === 'import') {
-    return (
-      <svg {...common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-    );
-  }
   if (name === 'duplicates') {
     return (
       <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>
@@ -74,17 +69,16 @@ export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 
     { id: 'alerts', label: 'Alertes fraude', icon: 'fraud', show: isOp || isAdmin },
     { id: 'duplicates', label: 'Doublons CDR', icon: 'duplicates', show: isOp || isAdmin },
     { id: 'predictions', label: 'Prédictions IA', icon: 'predictions', show: isBuss || isAdmin },
-    { id: 'imports', label: 'Import Données', icon: 'import', show: isAdmin || isOp },
     { id: 'users', label: 'Utilisateurs', icon: 'users', show: isAdmin },
     { id: 'audit-logs', label: 'Logs d\'audit', icon: 'audit', show: isAdmin },
-    { id: 'data-coverage', label: 'Couverture Données', icon: 'fraud', show: isAdmin || isBuss },
+
     { id: 'data-lineage', label: 'Data Lineage', icon: 'predictions', show: true },
     { id: 'etl-performance', label: 'Performance ETL', icon: 'audit', show: isAdmin || isOp },
   ];
 
   return (
     <div className="app-sidebar">
-      <div className="tt-sidebar-brand">
+      <div className="tt-sidebar-brand" onClick={() => onNavigate('dashboard')} style={{ cursor: 'pointer' }}>
         <img src="/tt-logo-sidebar-clean.png" alt="Tunisie Telecom" className="tt-logo sidebar" onError={(e) => { e.target.style.display='none'; }} />
         <div>
           <p className="tt-sidebar-title">Tunisie Telecom</p>

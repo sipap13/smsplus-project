@@ -140,102 +140,83 @@ export default function Services() {
   const servicesAvecAlertes = services.filter((s) => (s.nb_alertes_ouvertes || 0) > 0);
 
   return (
-    <div className="page">
-      <div className="page-header">
+    <div className="page" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Gestion des services</h1>
-          <p className="page-subtitle">{services.length} service(s) au total — {servicesAvecAlertes.length} avec alertes actives</p>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Gestion des Services VAS</h1>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
+              {services.length} services
+            </span>
+            {servicesAvecAlertes.length > 0 && (
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}>
+                ⚠ {servicesAvecAlertes.length} avec alertes
+              </span>
+            )}
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+              {services.filter(s => s.actif).length} actifs
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
             type="button"
             onClick={handleExport}
             disabled={exportLoading || services.length === 0}
-            style={{
-              background: exportLoading ? 'var(--text-muted)' : 'var(--success)',
-              color: 'white',
-              borderRadius: '8px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '600',
-              border: 'none',
-              cursor: (exportLoading || services.length === 0) ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
+            className="btn btn-soft"
+            style={{ height: '40px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            {exportLoading ? '...' : 'Excel'}
+            {exportLoading ? 'Export...' : 'Excel'}
           </button>
-          <button type="button" onClick={openNew} className="btn btn-primary">
-            Ajouter un service
+          <button type="button" onClick={openNew} className="btn btn-primary" style={{ height: '40px', fontWeight: 600 }}>
+            + Ajouter un service
           </button>
         </div>
       </div>
 
+      {/* Alert banner */}
       {servicesAvecAlertes.length > 0 && (
         <div style={{
-          background: 'var(--primary-soft)',
-          border: '1px solid var(--border)',
-          borderRadius: '8px',
-          padding: '12px 16px',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: '12px', padding: '0.9rem 1.25rem', marginBottom: '1.25rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '24px' }}>⚠</span>
             <div>
-              <div style={{ fontWeight: 700, color: 'var(--warning)', fontSize: '15px' }}>
-                {servicesAvecAlertes.length} service(s) avec alertes actives
+              <div style={{ fontWeight: 700, color: '#ef4444', fontSize: '0.9rem' }}>
+                {servicesAvecAlertes.length} service{servicesAvecAlertes.length > 1 ? 's' : ''} avec alertes actives
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                Total : {totalSmsSuspectsGlobal.toLocaleString('fr-FR')} SMS suspects détectés sur les 30 derniers jours
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                {totalSmsSuspectsGlobal.toLocaleString('fr-FR')} SMS suspects sur 30j
               </div>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/alerts')}
-            style={{
-              background: 'var(--warning)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)',
-            }}
-          >
-            Gérer les alertes →
-          </button>
+          <button onClick={() => navigate('/alerts')}
+            className="btn btn-primary" style={{ height: '34px', fontSize: '0.82rem', background: '#ef4444', border: 'none' }}
+          >Gérer les alertes →</button>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-         <button 
-           onClick={() => setFiltreAlerte('tous')}
-           className={`btn ${filtreAlerte === 'tous' ? 'btn-primary' : 'btn-ghost'}`}
-           style={{ fontSize: '13px', padding: '6px 14px' }}
-         >
-           Tous ({services.length})
-         </button>
-         <button 
-           onClick={() => setFiltreAlerte('avec_alertes')}
-           className={`btn ${filtreAlerte === 'avec_alertes' ? 'btn-primary' : 'btn-ghost'}`}
-           style={{ fontSize: '13px', padding: '6px 14px', color: filtreAlerte === 'avec_alertes' ? 'white' : 'var(--danger)' }}
-         >
-           ⚠ Avec alertes ({servicesAvecAlertes.length})
-         </button>
-         <button 
-           onClick={() => setFiltreAlerte('sans_alertes')}
-           className={`btn ${filtreAlerte === 'sans_alertes' ? 'btn-primary' : 'btn-ghost'}`}
-           style={{ fontSize: '13px', padding: '6px 14px', color: filtreAlerte === 'sans_alertes' ? 'white' : 'var(--success)' }}
-         >
-           ✓ Sans alertes ({services.length - servicesAvecAlertes.length})
-         </button>
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '1.25rem' }}>
+        {[
+          { id: 'tous', label: `Tous (${services.length})` },
+          { id: 'avec_alertes', label: `Avec alertes (${servicesAvecAlertes.length})` },
+          { id: 'sans_alertes', label: `Sans alertes (${services.length - servicesAvecAlertes.length})` },
+        ].map(f => (
+          <button key={f.id}
+            onClick={() => setFiltreAlerte(f.id)}
+            style={{
+              height: '34px', padding: '0 14px', fontSize: '0.82rem', fontWeight: 600,
+              borderRadius: '8px', border: '1px solid var(--border)', cursor: 'pointer',
+              background: filtreAlerte === f.id ? '#6366f1' : 'var(--bg-surface)',
+              color: filtreAlerte === f.id ? 'white' : 'var(--text-muted)',
+              transition: 'all 0.15s'
+            }}
+          >{f.label}</button>
+        ))}
       </div>
 
       {msg && (
@@ -393,8 +374,8 @@ export default function Services() {
                 return (
                   <tr key={s.id} style={{ background: hasAlerts ? 'rgba(254, 242, 242, 0.3)' : 'transparent' }}>
                     <td data-label="Service" style={{ padding: '0.875rem 1rem' }}>
-                       <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{s.nom_service}</div>
-                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{s.type_service} · {s.numero_court}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{s.nom_service}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{s.type_service} · {s.numero_court}</div>
                     </td>
                     <td data-label="Fournisseur" style={{ padding: '0.875rem 1rem', color: 'var(--text-main)' }}>
                       {s.nom_fournisseur}
@@ -447,16 +428,16 @@ export default function Services() {
                           <button
                             onClick={() => navigate(`/alerts?keyword=${s.keyword}`)}
                             style={{
-                            background: 'var(--bg-elevated)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '4px',
-                            padding: '3px 8px',
-                            fontSize: '11px',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                            marginTop: '4px',
-                            width: 'fit-content',
-                            fontWeight: 500
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '4px',
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              color: 'var(--primary)',
+                              cursor: 'pointer',
+                              marginTop: '4px',
+                              width: 'fit-content',
+                              fontWeight: 500
                             }}
                           >
                             Voir les alertes →
@@ -471,13 +452,13 @@ export default function Services() {
                         {s.actif ? 'Actif' : 'Inactif'}
                       </span>
                     </td>
-                    <td data-label="Actions" style={{ padding: '0.875rem 1rem' }}>
+                    <td data-label="Actions" style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap', minWidth: '150px' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => openEdit(s)} className="btn btn-soft btn-pill">
                           Détails
                         </button>
                         <button type="button" onClick={() => del(s.id)} className="btn btn-ghost btn-pill" style={{ color: 'var(--danger)' }}>
-                          ✕
+                          Suppr.
                         </button>
                       </div>
                     </td>

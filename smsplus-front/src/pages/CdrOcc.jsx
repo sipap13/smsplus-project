@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
@@ -22,7 +21,6 @@ export default function CdrOcc() {
   const [subscriberType, setSubscriberType] = useState('');
   const [partner, setPartner] = useState('');
 
-  const [keywords, setKeywords] = useState([]);
   const [subscriberTypes, setSubscriberTypes] = useState([]);
 
   const [applied, setApplied] = useState({
@@ -142,10 +140,12 @@ export default function CdrOcc() {
 
   return (
     <div className="page">
-      <div className="page-header">
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Journaux CDR OCC</h1>
-          <p className="page-subtitle">Consultation lecture seule — pagination serveur ({PER_PAGE} lignes / page)</p>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Journaux CDR OCC</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Consultation lecture seule — {PER_PAGE} lignes / page</p>
         </div>
       </div>
 
@@ -182,69 +182,30 @@ export default function CdrOcc() {
         </div>
       </div>
 
-      <div className="saas-surface" style={{ borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-        <div>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total revenus (filtre courant)</span>
-          <div className="text-heading" style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-2)' }}>{formatDT(totalCharge)}</div>
+      {/* Stats Strip */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '12px', padding: '0.85rem 1.25rem' }}>
+          <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Revenus (filtre courant)</p>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: '1.2rem', color: '#10b981' }}>{formatDT(totalCharge)}</p>
         </div>
-        <div>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Lignes correspondantes</span>
-          <div className="text-heading" style={{ fontSize: '1.2rem', fontWeight: 700 }}>{total.toLocaleString('fr-FR')}</div>
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '12px', padding: '0.85rem 1.25rem' }}>
+          <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Lignes correspondantes</p>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-main)' }}>{total.toLocaleString('fr-FR')}</p>
         </div>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          Page {currentPage}{lastPage ? ` / ${lastPage}` : ''}
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '12px', padding: '0.85rem 1.25rem' }}>
+          <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Page</p>
+          <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>{currentPage}{lastPage ? ` / ${lastPage}` : ''}</p>
         </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={exportLoading || total === 0}
-            className="btn"
-            style={{
-              background: exportLoading ? '#9ca3af' : '#16a34a',
-              color: 'white',
-              borderRadius: '8px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '600',
-              border: 'none',
-              cursor: exportLoading || total === 0 ? 'not-allowed' : 'pointer',
-              opacity: exportLoading || total === 0 ? 0.7 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (!exportLoading && total > 0) e.target.style.background = '#15803d';
-            }}
-            onMouseLeave={(e) => {
-              if (!exportLoading && total > 0) e.target.style.background = '#16a34a';
-            }}
+        <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+          <button type="button" onClick={handleExport} disabled={exportLoading || total === 0}
+            className="btn btn-soft"
+            style={{ height: '38px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', borderColor: '#10b981', color: '#10b981' }}
           >
-            {exportLoading ? (
-              <>
-                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-                Export en cours...
-              </>
-            ) : (
-              <>
-                <span>⬇</span>
-                Exporter Excel
-              </>
-            )}
+            {exportLoading ? 'Export en cours…' : 'Exporter Excel'}
           </button>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem', textAlign: 'center' }}>Max 10 000 lignes</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Max 10 000 lignes</span>
         </div>
-        
-        {/* Job Status Dropdown */}
-        <JobStatusBar
-          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_occ_csv', 'notifications_polling']}
-          title=""
-          compact={false}
-          refreshInterval={10000}
-          mode="dropdown"
-        />
+        <JobStatusBar jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_occ_csv', 'notifications_polling']} title="" compact={false} refreshInterval={10000} mode="dropdown" />
       </div>
 
       {error && (

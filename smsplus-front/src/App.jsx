@@ -16,12 +16,11 @@ import { isValidSessionUser } from './lib/sessionUser';
 import CdrOcc from './pages/CdrOcc';
 import CdrMmg from './pages/CdrMmg';
 import Predictions from './pages/Predictions';
-import Import from './pages/Import';
 import Landing from './pages/Landing';
 import Notifications from './pages/Notifications';
 import Duplicates from './pages/Duplicates';
 import AuditLog from './pages/AuditLog';
-import DataCoverage from './pages/DataCoverage';
+
 import DataLineage from './pages/DataLineage';
 import EtlPerformance from './pages/EtlPerformance';
 import { fetchNotificationCount } from './api/notifications';
@@ -164,112 +163,97 @@ function AppRoutes() {
         <Route
           element={user ? <AppShell user={user} onLogout={handleLogout} unreadCount={unreadCount} setUnreadCount={setUnreadCount} setSidebarUnread={setUnreadCount} /> : <Navigate to="/" replace />}
         >
-        <Route path="/dashboard" element={<Dashboard user={user} />} />
-        <Route
-          path="/services"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN']}>
-              <Services />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/msisdn"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
-              <MsisdnSearch />
-            </RoleGuard>
-          )}
-        />
-        <Route path="/revenus" element={<Revenus />} />
-        <Route
-          path="/cdr/occ"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_BUSS']}>
-              <CdrOcc />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/cdr/mmg"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
-              <CdrMmg />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/alerts"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
-              <Alerts />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/users"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN']}>
-              <Users user={user} />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/predictions"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_BUSS']}>
-              <Predictions />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/duplicates"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
-              <Duplicates />
-            </RoleGuard>
-          )}
-        />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route
-          path="/audit-logs"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN']}>
-              <AuditLog />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/imports"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
-              <Import />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/data-coverage"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN']}>
-              <DataCoverage />
-            </RoleGuard>
-          )}
-        />
-        <Route
-          path="/data-lineage"
-          element={<DataLineage />}
-        />
-        <Route
-          path="/etl-performance"
-          element={(
-            <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
-              <EtlPerformance />
-            </RoleGuard>
-          )}
-        />
-      </Route>
+          <Route path="/dashboard" element={<Dashboard user={user} />} />
+          <Route
+            path="/services"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN']}>
+                <Services />
+              </RoleGuard>
+            )}
+          />
+          <Route
+            path="/msisdn"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+                <MsisdnSearch />
+              </RoleGuard>
+            )}
+          />
+          <Route path="/revenus" element={<Revenus />} />
+          <Route
+            path="/cdr/occ"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_BUSS']}>
+                <CdrOcc />
+              </RoleGuard>
+            )}
+          />
+          <Route
+            path="/cdr/mmg"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+                <CdrMmg />
+              </RoleGuard>
+            )}
+          />
+          <Route
+            path="/alerts"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+                <Alerts />
+              </RoleGuard>
+            )}
+          />
+          <Route
+            path="/users"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN']}>
+                <Users user={user} />
+              </RoleGuard>
+            )}
+          />
+          <Route
+            path="/predictions"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_BUSS']}>
+                <Predictions />
+              </RoleGuard>
+            )}
+          />
+          <Route
+            path="/duplicates"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+                <Duplicates />
+              </RoleGuard>
+            )}
+          />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route
+            path="/audit-logs"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN']}>
+                <AuditLog />
+              </RoleGuard>
+            )}
+          />
 
-      <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
+          <Route
+            path="/data-lineage"
+            element={<DataLineage />}
+          />
+          <Route
+            path="/etl-performance"
+            element={(
+              <RoleGuard user={user} roles={['ADMIN', 'ANALYSTE_OP']}>
+                <EtlPerformance />
+              </RoleGuard>
+            )}
+          />
+        </Route>
+
+        <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
       </Routes>
       {user && <AiChatWidget user={user} />}
       <ToastContainer toasts={toasts} onClose={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />

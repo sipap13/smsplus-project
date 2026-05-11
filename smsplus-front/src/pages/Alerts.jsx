@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';

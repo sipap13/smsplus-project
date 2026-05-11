@@ -161,12 +161,15 @@ class EtlMonitorController extends Controller
     {
         try {
             $stats = [
-                'ra_t_tmp_occ' => \Illuminate\Support\Facades\DB::table('ra_t_tmp_occ')->count(),
-                'ra_t_tmp_mmg' => \Illuminate\Support\Facades\DB::table('ra_t_tmp_mmg')->count(),
-                'ra_t_occ_cdr_detail' => \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')->count(),
-                'ra_t_mmg_cdr_det' => \Illuminate\Support\Facades\DB::table('ra_t_mmg_cdr_det')->count(),
-                'ra_t_occ_agg' => \Illuminate\Support\Facades\DB::table('ra_t_occ_agg')->count(),
-                'ra_t_mmg_agg' => \Illuminate\Support\Facades\DB::table('ra_t_mmg_agg')->count(),
+                'ra_t_tmp_occ'       => \Illuminate\Support\Facades\DB::table('ra_t_tmp_occ')->count(),
+                'ra_t_tmp_mmg'       => \Illuminate\Support\Facades\DB::table('ra_t_tmp_mmg')->count(),
+                'ra_t_occ_cdr_detail'=> \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')->count(),
+                'ra_t_mmg_cdr_det'   => \Illuminate\Support\Facades\DB::table('ra_t_mmg_cdr_det')->count(),
+                'ra_t_occ_agg'       => \Illuminate\Support\Facades\DB::table('ra_t_occ_agg')->count(),
+                'ra_t_mmg_agg'       => \Illuminate\Support\Facades\DB::table('ra_t_mmg_agg')->count(),
+                'ra_t_alerts'        => \Illuminate\Support\Facades\DB::table('ra_t_alerts')->count(),
+                'ra_t_services'      => \Illuminate\Support\Facades\DB::table('ra_t_services')->count(),
+                'ra_t_etl_jobs'      => \Illuminate\Support\Facades\DB::table('ra_t_etl_jobs')->count(),
             ];
             return response()->json($stats);
         } catch (\Exception $e) {
@@ -176,47 +179,60 @@ class EtlMonitorController extends Controller
 
     public function stats(): JsonResponse
     {
-        $today = now()->startOfDay();
-        
-        $stats = [
-            'today' => [
-                'total' => EtlJob::where('created_at', '>=', $today)->count(),
-                'success' => EtlJob::where('created_at', '>=', $today)->success()->count(),
-                'failed' => EtlJob::where('created_at', '>=', $today)->failed()->count(),
-                'running' => EtlJob::running()->count(),
-            ],
-            'by_category' => EtlJob::where('created_at', '>=', $today)
-                ->selectRaw('job_type, status, COUNT(*) as count')
-                ->groupBy('job_type', 'status')
-                ->get()
-                ->groupBy('job_type')
-                ->map(function ($categoryGroup) {
-                    return [
-                        'total' => $categoryGroup->sum('count'),
-                        'success' => $categoryGroup->where('status', 'success')->sum('count'),
-                        'failed' => $categoryGroup->where('status', 'failed')->sum('count'),
-                        'running' => $categoryGroup->where('status', 'running')->sum('count'),
-                    ];
-                }),
-            'recent_jobs' => EtlJob::orderBy('created_at', 'desc')
-                ->limit(10)
-                ->get()
-                ->map(function ($job) {
-                    return [
-                        'id' => $job->id,
-                        'job_name' => $job->job_name,
-                        'job_type' => $job->job_type,
-                        'status' => $job->status,
-                        'main_metric' => $this->getMainMetric($job),
-                        'relative_time' => $this->getRelativeTime($job->finished_at ?? $job->started_at),
-                    ];
-                }),
-        ];
+        try {
+            $today = now()->startOfDay();
 
-        return response()->json([
-            'success' => true,
-            'data' => $stats,
-        ]);
+            $stats = [
+                'today' => [
+                    'total'   => EtlJob::where('created_at', '>=', $today)->count(),
+                    'success' => EtlJob::where('created_at', '>=', $today)->success()->count(),
+                    'failed'  => EtlJob::where('created_at', '>=', $today)->failed()->count(),
+                    'running' => EtlJob::running()->count(),
+                ],
+                'by_category' => EtlJob::where('created_at', '>=', $today)
+                    ->selectRaw('COALESCE(category, job_name) as job_type, status, COUNT(*) as count')
+                    ->groupBy('job_type', 'status')
+                    ->get()
+                    ->groupBy('job_type')
+                    ->map(function ($categoryGroup) {
+                        return [
+                            'total'   => $categoryGroup->sum('count'),
+                            'success' => $categoryGroup->where('status', 'success')->sum('count'),
+                            'failed'  => $categoryGroup->where('status', 'failed')->sum('count'),
+                            'running' => $categoryGroup->where('status', 'running')->sum('count'),
+                        ];
+                    }),
+                'recent_jobs' => EtlJob::orderBy('created_at', 'desc')
+                    ->limit(10)
+                    ->get()
+                    ->map(function ($job) {
+                        return [
+                            'id'            => $job->id,
+                            'job_name'      => $job->job_name,
+                            'job_type'      => $job->category ?? $job->job_name,
+                            'status'        => $job->status,
+                            'main_metric'   => $this->getMainMetric($job),
+                            'relative_time' => $this->getRelativeTime($job->finished_at ?? $job->started_at),
+                        ];
+                    }),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data'    => $stats,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('EtlStats Error', ['msg' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'data'    => [
+                    'today'        => ['total' => 0, 'success' => 0, 'failed' => 0, 'running' => 0],
+                    'by_category'  => [],
+                    'recent_jobs'  => [],
+                ],
+                'error' => $e->getMessage(),
+            ], 200); // Return 200 with empty data instead of 500
+        }
     }
 
     public function index(Request $request): JsonResponse

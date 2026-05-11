@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\EtlMonitorService;
+use App\Services\MsisdnRiskService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,7 @@ class CdrController extends Controller
 
     public function __construct(
         protected EtlMonitorService $monitor,
+        protected MsisdnRiskService $riskService,
     ) {}
 
     /** Colonnes retournées (lecture seule, pas d’id lourd si non demandé — on garde id pour stabilité UI). */
@@ -376,6 +378,7 @@ class CdrController extends Controller
             'occ_truncated'    => $occTotal > $occ->count(),
             'mmg_truncated'    => $mmgTotal > $mmg->count(),
             'msisdn_normalized'=> $norm,
+            'risk_analysis'    => $this->riskService->analyze($norm),
         ]);
     }
 

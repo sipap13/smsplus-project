@@ -56,12 +56,12 @@ services:
       GEMINI_TIMEOUT: 30
       GEMINI_ENABLED: "true"
       # === Configuration Email (2FA) ===
-      # Option 1: LOG (développement — les emails sont écrits dans storage/logs/laravel.log)
-      #MAIL_MAILER: log
-      # Option 2: SMTP Gmail — voir EMAIL_SETUP.md pour configurer
+      # Option 1: LOG (dÃ©veloppement â€” les emails sont Ã©crits dans storage/logs/laravel.log)
+      #MAIL_MAILER: smtp
+      # Option 2: SMTP Gmail â€” voir EMAIL_SETUP.md pour configurer
       #   1. Activez la 2FA sur votre compte Google
-      #   2. Générez un App Password : https://myaccount.google.com/apppasswords
-      #   3. Décommentez les lignes ci-dessous et remplacez VOTRE_APP_PASSWORD
+      #   2. GÃ©nÃ©rez un App Password : https://myaccount.google.com/apppasswords
+      #   3. DÃ©commentez les lignes ci-dessous et remplacez VOTRE_APP_PASSWORD
       MAIL_MAILER: smtp
       MAIL_HOST: smtp.gmail.com
       MAIL_PORT: 587

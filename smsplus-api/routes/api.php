@@ -121,12 +121,6 @@ Route::prefix('duplicates')->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP'])-
     Route::post('/supprimer-tous-occ', [\App\Http\Controllers\Api\DuplicateController::class, 'supprimerTousOcc'])->middleware('role:ADMIN');
 });
 
-// Imports (ADMIN uniquement)
-Route::post('/imports/upload', [ImportController::class, 'upload'])->middleware(['auth.api', 'role:ADMIN']);
-Route::get('/imports/history', [ImportController::class, 'history'])->middleware(['auth.api', 'role:ADMIN']);
-Route::get('/imports/{id}/status', [ImportController::class, 'status'])->middleware(['auth.api', 'role:ADMIN']);
-Route::delete('/imports/{id}', [ImportController::class, 'destroy'])->middleware(['auth.api', 'role:ADMIN']);
-
 // Notifications in-app
 Route::prefix('notifications')->middleware('auth.api')->group(function () {
     Route::get('/', [NotificationController::class, 'index']);

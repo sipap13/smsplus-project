@@ -152,106 +152,23 @@ class AuthController extends Controller
             return response()->json(['message' => 'Email ou mot de passe incorrect'], 401);
         }
 
-        // Si 2FA désactivé pour cet utilisateur → connexion directe (fallback)
-        if (! $user->two_fa_enabled) {
-            $result = $this->issueTokenAndRespond($user, $request);
-            
-            try {
-                if ($jobId) {
-                    $this->monitor->finishJob($jobId, 'success', null, [
-                        'user_id' => $user->id,
-                        'email' => $user->email,
-                        'role' => $user->role,
-                        'no_2fa' => true,
-                    ]);
-                }
-            } catch (\Exception $e) {
-                Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
-            }
-            
-            return $result;
-        }
-
-        // Vérifier si l'utilisateur est bloqué
-        if (Cache::has($this->blockKey($user->email))) {
-            $remaining = Cache::get($this->blockKey($user->email));
-            $minutes = now()->diffInMinutes($remaining, false);
-            $minutes = abs((int) $minutes);
-
-            try {
-                if ($jobId) {
-                    $this->monitor->finishJob($jobId, 'failed', 'Utilisateur bloqué');
-                }
-            } catch (\Exception $e) {
-                Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
-            }
-
-            return response()->json([
-                'message' => "Trop de tentatives, réessayez dans {$minutes} min",
-            ], 429);
-        }
-
-        $method = 'email';
-
-        // Générer le code
-        $code = $this->generateCode();
-
-        DB::table('ra_t_users')->where('id', $user->id)->update([
-            'two_fa_code' => $code,
-            'two_fa_expires_at' => now()->addMinutes(self::CODE_TTL_MINUTES),
-            'updated_at' => now(),
-        ]);
-
-        // Envoi email
-        if ($method === 'email' || $method === 'both') {
-            try {
-                Mail::to($user->email)->send(new TwoFactorMail($code));
-            } catch (\Exception $e) {
-                Log::error('Erreur envoi email 2FA: '.$e->getMessage());
-
-                try {
-                    if ($jobId) {
-                        $this->monitor->finishJob($jobId, 'failed', 'Erreur envoi email 2FA');
-                    }
-                } catch (\Exception $e2) {
-                    Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e2->getMessage()]);
-                }
-
-                return response()->json(['message' => 'Erreur lors de l\'envoi du code. Réessayez.'], 500);
-            }
-        }
-
-        // Envoi SMS désactivé
-
-        // Reset compteurs de tentatives
-        Cache::forget($this->attemptsKey($user->email));
-
-        $this->logAttempt($user, 'resend', $request, "Code 2FA envoyé par {$method}");
-
+        // 2FA SUPPRIMÉE - Connexion directe
+        $result = $this->issueTokenAndRespond($user, $request);
+        
         try {
             if ($jobId) {
                 $this->monitor->finishJob($jobId, 'success', null, [
                     'user_id' => $user->id,
                     'email' => $user->email,
                     'role' => $user->role,
-                    '2fa_method' => $method,
-                    'requires_2fa' => true,
+                    '2fa_skipped' => true,
                 ]);
             }
         } catch (\Exception $e) {
             Log::warning('EtlMonitorService finishJob failed for user_login', ['error' => $e->getMessage()]);
         }
-
-        // Préparer la réponse avec choix de méthode
-        $response = [
-            'step' => 'two_fa_required',
-            'email' => $this->maskEmail($user->email),
-            'expires_in' => self::CODE_TTL_MINUTES * 60,
-            'message' => 'Code envoyé à votre email',
-            'method' => $method,
-        ];
-
-        return response()->json($response);
+        
+        return $result;
     }
 
     /* ───────────────────────────────

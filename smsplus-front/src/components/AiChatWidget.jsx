@@ -9,7 +9,7 @@ const suggestions = [
   'Compare OCC vs MMG',
 ];
 
-export default function AiChatWidget({ user }) {
+export default function AiChatWidget({  }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');

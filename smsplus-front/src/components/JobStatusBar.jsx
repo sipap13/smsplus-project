@@ -5,95 +5,95 @@ import api from '../api/axios';
 /* ───────── Translation Maps ───────── */
 
 const JOB_LABELS = {
-  'etl_agg_from_raw':        'Agrégation CDR',
-  'etl_cdr_from_tmp':        'Chargement CDR',
-  'import_occ_csv':          'Import OCC',
-  'import_mmg_csv':          'Import MMG',
-  'import_occ_xlsx':         'Import OCC (Excel)',
-  'import_mmg_xlsx':         'Import MMG (Excel)',
-  'import_batch_process':    'Import batch',
-  'cdr_occ_paginate':        'Lecture CDR OCC',
-  'cdr_occ_filter':          'Filtrage CDR OCC',
-  'cdr_mmg_paginate':        'Lecture CDR MMG',
-  'cdr_mmg_filter':          'Filtrage CDR MMG',
-  'export_occ_excel':        'Export OCC Excel',
-  'export_mmg_excel':        'Export MMG Excel',
-  'export_revenus_excel':    'Export Revenus Excel',
-  'export_services_excel':   'Export Services Excel',
-  'export_alertes_excel':    'Export Alertes Excel',
-  'export_rapport_pdf':      'Génération PDF',
+  'etl_agg_from_raw': 'Agrégation CDR',
+  'etl_cdr_from_tmp': 'Chargement CDR',
+  'import_occ_csv': 'Import OCC',
+  'import_mmg_csv': 'Import MMG',
+  'import_occ_xlsx': 'Import OCC (Excel)',
+  'import_mmg_xlsx': 'Import MMG (Excel)',
+  'import_batch_process': 'Import batch',
+  'cdr_occ_paginate': 'Lecture CDR OCC',
+  'cdr_occ_filter': 'Filtrage CDR OCC',
+  'cdr_mmg_paginate': 'Lecture CDR MMG',
+  'cdr_mmg_filter': 'Filtrage CDR MMG',
+  'export_occ_excel': 'Export OCC Excel',
+  'export_mmg_excel': 'Export MMG Excel',
+  'export_revenus_excel': 'Export Revenus Excel',
+  'export_services_excel': 'Export Services Excel',
+  'export_alertes_excel': 'Export Alertes Excel',
+  'export_rapport_pdf': 'Génération PDF',
   'prediction_data_collect': 'Collecte historique',
   'prediction_metrics_calc': 'Calcul tendances',
-  'prediction_groq_call':    'Analyse Groq IA',
-  'prediction_cache_save':   'Mise en cache',
-  'ai_chatbot':              'Chatbot IA',
-  'ai_risk_score':           'Score risque MSISDN',
-  'msisdn_search_occ':       'Recherche OCC',
-  'msisdn_search_mmg':       'Recherche MMG',
-  'msisdn_search_all':       'Recherche MSISDN',
+  'prediction_groq_call': 'Analyse Groq IA',
+  'prediction_cache_save': 'Mise en cache',
+  'ai_chatbot': 'Chatbot IA',
+  'ai_risk_score': 'Score risque MSISDN',
+  'msisdn_search_occ': 'Recherche OCC',
+  'msisdn_search_mmg': 'Recherche MMG',
+  'msisdn_search_all': 'Recherche MSISDN',
   'msisdn_reclamations_search': 'Recherche réclamations',
-  'msisdn_timeline_build':   'Construction timeline',
-  'alerte_auto_detect':      'Détection anomalies',
-  'alerte_create':           'Création alerte',
-  'alerte_update':           'Mise à jour alerte',
-  'alerte_resolve':          'Résolution alerte',
-  'notification_send':       'Envoi notification',
-  'notifications_load':      'Chargement notifications',
-  'notifications_polling':   'Polling notifications',
-  'notification_mark_read':  'Lecture notification',
+  'msisdn_timeline_build': 'Construction timeline',
+  'alerte_auto_detect': 'Détection anomalies',
+  'alerte_create': 'Création alerte',
+  'alerte_update': 'Mise à jour alerte',
+  'alerte_resolve': 'Résolution alerte',
+  'notification_send': 'Envoi notification',
+  'notifications_load': 'Chargement notifications',
+  'notifications_polling': 'Polling notifications',
+  'notification_mark_read': 'Lecture notification',
   'notifications_mark_all_read': 'Tout lire',
-  'dashboard_stats_load':    'Chargement KPIs',
+  'dashboard_stats_load': 'Chargement KPIs',
   'dashboard_revenus_chart': 'Chargement revenus chart',
   'dashboard_anomaly_check': 'Vérification anomalies',
-  'services_list_load':      'Chargement services',
-  'service_create':          'Création service',
-  'service_update':          'Modification service',
-  'service_delete':          'Suppression service',
-  'user_create':             'Création utilisateur',
-  'user_update_role':        'Modification rôle',
-  'user_login':              'Connexion',
-  'user_2fa_verify':         'Vérification 2FA',
-  'user_2fa_send':           'Envoi code 2FA',
-  'etl_deduplicate':         'Suppression doublons',
-  'report_pdf':              'Rapport PDF mensuel',
+  'services_list_load': 'Chargement services',
+  'service_create': 'Création service',
+  'service_update': 'Modification service',
+  'service_delete': 'Suppression service',
+  'user_create': 'Création utilisateur',
+  'user_update_role': 'Modification rôle',
+  'user_login': 'Connexion',
+  'user_2fa_verify': 'Vérification 2FA',
+  'user_2fa_send': 'Envoi code 2FA',
+  'etl_deduplicate': 'Suppression doublons',
+  'report_pdf': 'Rapport PDF mensuel',
 };
 
 const JOB_ICONS = {
-  'etl_agg_from_raw':        '📊',
-  'etl_cdr_from_tmp':        '💾',
-  'import_occ_csv':          '📥',
-  'import_mmg_csv':          '📥',
-  'import_batch_process':    '📦',
-  'cdr_occ_paginate':        '🔍',
-  'cdr_mmg_paginate':        '🔍',
-  'export_occ_excel':        '📤',
-  'export_mmg_excel':        '📤',
-  'export_rapport_pdf':      '📄',
-  'prediction_groq_call':    '🤖',
-  'ai_chatbot':              '💬',
-  'ai_risk_score':           '🛡',
-  'alerte_auto_detect':      '⚠️',
-  'alerte_create':           '🚨',
-  'alerte_update':           '🔄',
-  'notification_send':       '🔔',
-  'notifications_load':      '📬',
-  'notification_mark_read':  '✅',
+  'etl_agg_from_raw': '📊',
+  'etl_cdr_from_tmp': '💾',
+  'import_occ_csv': '📥',
+  'import_mmg_csv': '📥',
+  'import_batch_process': '📦',
+  'cdr_occ_paginate': '🔍',
+  'cdr_mmg_paginate': '🔍',
+  'export_occ_excel': '📤',
+  'export_mmg_excel': '📤',
+  'export_rapport_pdf': '📄',
+  'prediction_groq_call': '🤖',
+  'ai_chatbot': '💬',
+  'ai_risk_score': '🛡',
+  'alerte_auto_detect': '⚠️',
+  'alerte_create': '🚨',
+  'alerte_update': '🔄',
+  'notification_send': '🔔',
+  'notifications_load': '📬',
+  'notification_mark_read': '✅',
   'notifications_mark_all_read': '📖',
-  'dashboard_stats_load':    '📊',
-  'dashboard_revenus_load':  '💰',
-  'services_list_load':      '📋',
-  'service_create':          '➕',
-  'service_update':          '✏️',
-  'service_delete':          '🗑️',
-  'user_create':             '👤',
-  'user_login':              '🔑',
-  'user_2fa_verify':         '🔐',
-  'user_2fa_send':           '📱',
-  'msisdn_search_all':       '🔎',
+  'dashboard_stats_load': '📊',
+  'dashboard_revenus_load': '💰',
+  'services_list_load': '📋',
+  'service_create': '➕',
+  'service_update': '✏️',
+  'service_delete': '🗑️',
+  'user_create': '👤',
+  'user_login': '🔑',
+  'user_2fa_verify': '🔐',
+  'user_2fa_send': '📱',
+  'msisdn_search_all': '🔎',
   'msisdn_reclamations_search': '📝',
-  'msisdn_timeline_build':   '�',
-  'etl_deduplicate':         '🧹',
-  'report_pdf':              '📋',
+  'msisdn_timeline_build': '�',
+  'etl_deduplicate': '🧹',
+  'report_pdf': '📋',
 };
 
 /* ───────── Helpers ───────── */
@@ -117,8 +117,8 @@ const STATUS_COLORS = {
 function getCategoryColor(jobName) {
   if (jobName.includes('import')) return '#3b82f6';
   if (jobName.includes('etl') || jobName.includes('agg')) return '#8b5cf6';
-  if (jobName.includes('groq') || jobName.includes('prediction') || 
-      jobName.includes('chatbot') || jobName.includes('risk')) return '#f59e0b';
+  if (jobName.includes('groq') || jobName.includes('prediction') ||
+    jobName.includes('chatbot') || jobName.includes('risk')) return '#f59e0b';
   if (jobName.includes('export') || jobName.includes('report')) return '#10b981';
   if (jobName.includes('alerte') || jobName.includes('notif')) return '#ef4444';
   return '#64748b';
@@ -127,15 +127,15 @@ function getCategoryColor(jobName) {
 function formatMetric(job) {
   const meta = job.metadata || {};
   const lines = job.lignes_inserees || job.lignes_traitees || 0;
-  
+
   // Si 0 lignes → affiche durée seulement
   if (lines === 0 && job.duration_ms) {
     return `Terminé en ${formatDuration(job.duration_ms)}`;
   }
-  
+
   // Formatte avec séparateur milliers
   const formatted = lines.toLocaleString('fr-FR');
-  
+
   if (job.job_name.includes('import')) {
     const ignored = job.lignes_ignorees || 0;
     const errors = job.lignes_erreur || 0;
@@ -144,28 +144,28 @@ function formatMetric(job) {
     }
     return `${formatted} lignes importées`;
   }
-  
+
   if (job.job_name.includes('export')) {
     return `${formatted} lignes exportées`;
   }
-  
+
   if (job.job_name.includes('agg')) {
     return `${formatted} lignes agrégées`;
   }
-  
+
   if (job.job_name.includes('groq') || job.job_name.includes('chatbot')) {
     const tokens = meta.tokens_output || 0;
     const duration = formatDuration(job.duration_ms);
-    return tokens > 0 
-      ? `Répondu en ${duration} · ${tokens} tokens` 
+    return tokens > 0
+      ? `Répondu en ${duration} · ${tokens} tokens`
       : `Terminé en ${duration}`;
   }
-  
+
   if (job.job_name.includes('risk')) {
     const score = meta.score || 0;
     return score > 0 ? `Score risque: ${score}/100` : 'Calculé';
   }
-  
+
   return lines > 0 ? `${formatted} lignes traitées` : 'Terminé';
 }
 
@@ -180,8 +180,8 @@ function formatDuration(ms) {
 }
 
 function relativeTime(dateStr) {
-  if (!dateStr || dateStr === 'NaN' || 
-      dateStr === null || dateStr === undefined) {
+  if (!dateStr || dateStr === 'NaN' ||
+    dateStr === null || dateStr === undefined) {
     return '—';
   }
   try {
@@ -207,11 +207,11 @@ function CompactBar({ jobs, title }) {
   const runningJob = jobs.find((j) => j.is_running);
   const recentSuccess = jobs.filter((j) => j.status === 'success').slice(0, 2);
   const hasFailed = jobs.some((j) => j.status === 'failed');
-  
+
   // Determine background color based on status
   let bgColor = '#f0f9ff'; // default blue light
   let borderColor = '#3b82f6';
-  
+
   if (hasFailed) {
     bgColor = '#fef2f2';
     borderColor = '#dc2626';
@@ -255,7 +255,7 @@ function CompactBar({ jobs, title }) {
             {JOB_LABELS[runningJob.job_name] || runningJob.job_name}
           </span>
           <span>
-            {runningJob.pourcentage > 0 
+            {runningJob.pourcentage > 0
               ? `${runningJob.pourcentage}% · ~${Math.ceil((100 - runningJob.pourcentage) / runningJob.pourcentage * 30)}s restantes`
               : 'En cours...'
             }
@@ -376,7 +376,6 @@ function FullCard({ jobs, title, onClose }) {
         jobs.map((job) => {
           const jobLabel = JOB_LABELS[job.job_name] || job.job_name;
           const jobIcon = JOB_ICONS[job.job_name] || '⚙';
-          const categoryColor = getCategoryColor(job.job_name);
           const statusColor = STATUS_COLORS[job.status] || STATUS_COLORS.pending;
           const statusIcon = STATUS_ICONS[job.status] || STATUS_ICONS.pending;
 
@@ -384,12 +383,13 @@ function FullCard({ jobs, title, onClose }) {
             <div
               key={job.id}
               style={{
-                background: 'white',
+                background: 'var(--bg-elevated)',
                 borderLeft: `3px solid ${statusColor}`,
-                borderRadius: '6px',
+                borderRadius: '8px',
                 padding: '10px 12px',
                 marginBottom: '6px',
-                transition: 'box-shadow 0.2s',
+                border: '1px solid var(--border)',
+                transition: 'box-shadow 0.2s, background 0.15s',
                 cursor: 'pointer',
               }}
               onMouseEnter={(e) => {
@@ -416,11 +416,11 @@ function FullCard({ jobs, title, onClose }) {
               </div>
 
               {/* Metric line */}
-              <div style={{ 
-                fontSize: '0.8rem', 
-                color: 'var(--text-muted)', 
+              <div style={{
+                fontSize: '0.8rem',
+                color: 'var(--text-muted)',
                 marginTop: '4px',
-                paddingLeft: '24px' 
+                paddingLeft: '24px'
               }}>
                 {formatMetric(job)}
                 {job.duration_ms && job.duration_ms > 0 && (
@@ -430,12 +430,12 @@ function FullCard({ jobs, title, onClose }) {
 
               {/* Progress line if running */}
               {job.is_running && job.pourcentage > 0 && (
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                   marginTop: '6px',
-                  paddingLeft: '24px' 
+                  paddingLeft: '24px'
                 }}>
                   <div style={{
                     flex: 1,
@@ -454,11 +454,11 @@ function FullCard({ jobs, title, onClose }) {
                       }}
                     />
                   </div>
-                  <span style={{ 
-                    fontSize: '0.7rem', 
+                  <span style={{
+                    fontSize: '0.7rem',
                     color: statusColor,
                     fontWeight: 600,
-                    minWidth: '35px' 
+                    minWidth: '35px'
                   }}>
                     {job.pourcentage}%
                   </span>
@@ -474,8 +474,8 @@ function FullCard({ jobs, title, onClose }) {
                   paddingLeft: '24px',
                   fontStyle: 'italic',
                 }}>
-                  {job.error_message.length > 80 
-                    ? job.error_message.substring(0, 80) + '...' 
+                  {job.error_message.length > 80
+                    ? job.error_message.substring(0, 80) + '...'
                     : job.error_message
                   }
                 </div>
@@ -488,23 +488,23 @@ function FullCard({ jobs, title, onClose }) {
   );
 }
 
-function DropdownMode({ jobs, title }) {
+function DropdownMode({ jobs }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
-  
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  
+
   if (!jobs || jobs.length === 0) return null;
-  
+
   const runningCount = jobs.filter(j => j.is_running).length;
   const successCount = jobs.filter(j => j.status === 'success').length;
   const failedCount = jobs.filter(j => j.status === 'failed').length;
@@ -537,17 +537,17 @@ function DropdownMode({ jobs, title }) {
         <span>{jobs.length} traitements</span>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{isOpen ? '▲' : '▼'}</span>
       </button>
-      
+
       {isOpen && (
         <div style={{
           position: 'absolute',
           top: '40px',
           right: '0',
           width: '350px',
-          background: 'white',
+          background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
-          borderRadius: '8px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          borderRadius: '12px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.16)',
           zIndex: 100,
           maxHeight: '400px',
           overflowY: 'auto',
@@ -564,14 +564,14 @@ function DropdownMode({ jobs, title }) {
               {successCount} succès · {failedCount} erreurs · {runningCount} en cours
             </div>
           </div>
-          
+
           <div style={{ padding: '8px' }}>
             {jobs.map((job) => {
               const jobLabel = JOB_LABELS[job.job_name] || job.job_name;
               const jobIcon = JOB_ICONS[job.job_name] || '⚙';
               const statusColor = STATUS_COLORS[job.status] || STATUS_COLORS.pending;
               const statusIcon = STATUS_ICONS[job.status] || STATUS_ICONS.pending;
-              
+
               return (
                 <div
                   key={job.id}
@@ -597,23 +597,23 @@ function DropdownMode({ jobs, title }) {
                       {relativeTime(job.finished_at || job.started_at)}
                     </span>
                   </div>
-                  
-                  <div style={{ 
-                    fontSize: '0.7rem', 
-                    color: 'var(--text-muted)', 
+
+                  <div style={{
+                    fontSize: '0.7rem',
+                    color: 'var(--text-muted)',
                     marginTop: '2px',
-                    paddingLeft: '20px' 
+                    paddingLeft: '20px'
                   }}>
                     {formatMetric(job)}
                   </div>
-                  
+
                   {job.is_running && job.pourcentage > 0 && (
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '6px', 
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                       marginTop: '4px',
-                      paddingLeft: '20px' 
+                      paddingLeft: '20px'
                     }}>
                       <div style={{
                         flex: 1,
@@ -632,11 +632,11 @@ function DropdownMode({ jobs, title }) {
                           }}
                         />
                       </div>
-                      <span style={{ 
-                        fontSize: '0.65rem', 
+                      <span style={{
+                        fontSize: '0.65rem',
                         color: statusColor,
                         fontWeight: 600,
-                        minWidth: '30px' 
+                        minWidth: '30px'
                       }}>
                         {job.pourcentage}%
                       </span>
@@ -667,20 +667,20 @@ function InlineTimeline({ jobs, steps }) {
         marginTop: '0.75rem',
       }}
     >
-      <div style={{ 
-        fontSize: '0.9rem', 
-        fontWeight: 600, 
+      <div style={{
+        fontSize: '0.9rem',
+        fontWeight: 600,
         color: 'var(--text-main)',
         marginBottom: '12px',
         textAlign: 'center'
       }}>
-        Pipeline d'analyse
+        Pipeline d&apos;analyse
       </div>
-      
+
       {/* Horizontal timeline */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'space-between',
         position: 'relative',
         marginBottom: '16px'
@@ -695,16 +695,15 @@ function InlineTimeline({ jobs, steps }) {
           background: '#e2e8f0',
           zIndex: 1,
         }} />
-        
+
         {steps.map((step, index) => {
           const job = jobMap.get(step.jobName);
           const isDone = job?.status === 'success';
           const isRunning = job?.status === 'running';
-          const isPending = !job || job.status === 'pending';
-          const stepColor = isDone ? STATUS_COLORS.success : 
-                          isRunning ? STATUS_COLORS.running : 
-                          '#e2e8f0';
-          
+          const stepColor = isDone ? STATUS_COLORS.success :
+            isRunning ? STATUS_COLORS.running :
+              '#e2e8f0';
+
           return (
             <div key={step.jobName} style={{ zIndex: 2 }}>
               {/* Circle */}
@@ -726,7 +725,7 @@ function InlineTimeline({ jobs, steps }) {
               >
                 {isDone ? '✓' : isRunning ? '🔄' : '○'}
               </div>
-              
+
               {/* Arrow between steps */}
               {index < steps.length - 1 && (
                 <div style={{
@@ -744,10 +743,10 @@ function InlineTimeline({ jobs, steps }) {
           );
         })}
       </div>
-      
+
       {/* Labels and durations */}
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         justifyContent: 'space-between',
         gap: '8px'
       }}>
@@ -756,21 +755,21 @@ function InlineTimeline({ jobs, steps }) {
           const isDone = job?.status === 'success';
           const isRunning = job?.status === 'running';
           const isPending = !job || job.status === 'pending';
-          
+
           return (
-            <div 
-              key={step.jobName} 
-              style={{ 
-                flex: 1, 
+            <div
+              key={step.jobName}
+              style={{
+                flex: 1,
                 textAlign: 'center',
                 fontSize: '0.75rem'
               }}
             >
               <div style={{
                 fontWeight: isRunning ? 600 : 400,
-                color: isDone ? STATUS_COLORS.success : 
-                        isRunning ? STATUS_COLORS.running : 
-                        'var(--text-muted)',
+                color: isDone ? STATUS_COLORS.success :
+                  isRunning ? STATUS_COLORS.running :
+                    'var(--text-muted)',
                 marginBottom: '2px'
               }}>
                 {step.label}
@@ -780,8 +779,8 @@ function InlineTimeline({ jobs, steps }) {
                 color: 'var(--text-muted)'
               }}>
                 {isDone && job?.duration_ms ? formatDuration(job.duration_ms) :
-                 isRunning ? 'En cours' :
-                 isPending ? 'Attente' : ''}
+                  isRunning ? 'En cours' :
+                    isPending ? 'Attente' : ''}
               </div>
             </div>
           );

@@ -99,36 +99,19 @@ export default function Revenus() {
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-      const d = payload[0].payload;
       return (
-        <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b' }}>
-          <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {displayDate(label)}</div>
-          {d.is_outlier && <div style={{ color: '#fbbf24', fontSize: '11px', marginBottom: '4px' }}>⚠ Valeur exceptionnelle (z-score = {d.z_score})</div>}
+        <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: '1px solid #1e293b' }}>
+          <div style={{ fontWeight: 700, marginBottom: '4px' }}>{displayDate(label)}</div>
           {payload.map((p, i) => (
             <div key={i} style={{ color: p.color || '#6366f1', display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
               <span>{p.name}:</span>
               <span style={{ fontWeight: 700 }}>{formatDT(p.value)}</span>
             </div>
           ))}
-          {d.is_outlier && <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>Plafonné à : {formatDT(d.valeur_capped)}</div>}
         </div>
       );
     }
     return null;
-  };
-
-  const renderCustomBar = (props) => {
-    const { x, y, width, height, is_outlier, fill } = props;
-    if (is_outlier) {
-      return (
-        <g>
-          <rect x={x} y={y} width={width} height={height} fill={fill} opacity={0.7} />
-          <line x1={x} y1={y} x2={x + width} y2={y} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 2" />
-          <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10} fill="#f59e0b">▲</text>
-        </g>
-      );
-    }
-    return <rect x={x} y={y} width={width} height={height} fill={fill} />;
   };
 
   const displayDate = (raw) => {
@@ -272,19 +255,14 @@ export default function Revenus() {
           <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem' }}>
             Revenus par {view === 'month' ? 'mois' : (isHourMode ? 'heure' : 'date')}
           </h3>
-          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
-            <BarChart data={view === 'month' ? monthlyChart : barData}>
+          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0} debounce={50}>
+            <BarChart data={view === 'month' ? monthlyChart : barData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey={view === 'month' ? 'period' : 'date'} tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} width={60} />
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="valeur_capped" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Revenus (DT)" shape={renderCustomBar}>
-                {barData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : 'var(--primary)'} />
-                ))}
-              </Bar>
+              <Bar dataKey="total" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Revenus (DT)" maxBarSize={40} />
             </BarChart>
-
           </ResponsiveContainer>
         </div>
 
@@ -293,7 +271,7 @@ export default function Revenus() {
           <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem' }}>
             Répartition par service
           </h3>
-          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
+          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0} debounce={50}>
             <PieChart>
               <Pie data={pieDataForChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                 {pieDataForChart.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}

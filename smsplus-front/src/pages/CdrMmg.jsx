@@ -1,10 +1,8 @@
-/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import JobStatusBar from '../components/JobStatusBar';
 import useServiceMapping from '../hooks/useServiceMapping';
-import { formatDT } from '../lib/format';
 
 const PER_PAGE = 50;
 

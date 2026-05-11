@@ -94,7 +94,7 @@ export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'lig
 
   return (
     <>
-      <header className="tt-navbar tt-navbar-compact">
+      <header className="tt-navbar">
         <div className="tt-navbar-left">
           <div className="tt-breadcrumb">{breadcrumb}</div>
           <h1 className="tt-navbar-title">{title}</h1>

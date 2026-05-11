@@ -126,7 +126,16 @@ class DuplicateController extends Controller
      */
     public function stats(Request $request)
     {
-        $dateDebut = $request->query('date_debut', now()->subDays(30)->toDateString());
+        $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date') ?: now()->toDateString();
+        $dateDebut = $request->query('date_debut', date('Y-m-d', strtotime($maxDate . ' -30 days')));
+
+        // Total CDRs for the sample period (for rate calculation)
+        $totalSampleCount = DB::table('ra_t_occ_cdr_detail')
+            ->where('start_date', '>=', $dateDebut)
+            ->count() + 
+            DB::table('ra_t_mmg_cdr_det')
+            ->where('start_date', '>=', $dateDebut)
+            ->count();
 
         // Stats OCC
         $occStats = DB::table('ra_t_occ_cdr_detail')
@@ -219,6 +228,8 @@ class DuplicateController extends Controller
             'by_date' => $byDate,
             'total_affected' => $occAffectedCdr + $mmgAffectedCdr,
             'total_revenue_impact' => round($occRevenueImpact, 3),
+            'total_sample_count' => $totalSampleCount,
+            'date_debut_effective' => $dateDebut
         ]);
     }
 

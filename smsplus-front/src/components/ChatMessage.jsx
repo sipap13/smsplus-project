@@ -1,3 +1,5 @@
+import PropTypes from 'prop-types';
+
 export default function ChatMessage({ message }) {
   const formatTimestamp = (timestamp) => {
     try {
@@ -29,3 +31,15 @@ export default function ChatMessage({ message }) {
     </div>
   );
 }
+
+ChatMessage.propTypes = {
+  message: PropTypes.shape({
+    type: PropTypes.string.isRequired,
+    content: PropTypes.string,
+    data: PropTypes.shape({
+      count: PropTypes.number,
+    }),
+    sql: PropTypes.string,
+    timestamp: PropTypes.string,
+  }).isRequired,
+};

@@ -16,12 +16,11 @@ const pageTitles = {
   '/alerts': 'Alertes fraude',
   '/predictions': 'Prédictions IA',
   '/notifications': 'Notifications',
-  '/imports': 'Import de Données',
   '/users': 'Utilisateurs',
   '/etl-monitor': 'ETL Monitor',
   '/duplicates': 'Doublons CDR',
   '/audit-logs': 'Logs d\'audit',
-  '/data-coverage': 'Audit Couverture Données',
+
   '/data-lineage': 'Data Lineage Interactive',
   '/etl-performance': 'Performance ETL',
 };
@@ -56,12 +55,11 @@ export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCou
     if (p.startsWith('/alerts')) return 'alerts';
     if (p.startsWith('/predictions')) return 'predictions';
     if (p.startsWith('/notifications')) return 'notifications';
-    if (p.startsWith('/imports')) return 'imports';
     if (p.startsWith('/users')) return 'users';
     if (p.startsWith('/etl-monitor')) return 'etl-monitor';
     if (p.startsWith('/duplicates')) return 'duplicates';
     if (p.startsWith('/audit-logs')) return 'audit-logs';
-    if (p.startsWith('/data-coverage')) return 'data-coverage';
+
     if (p.startsWith('/data-lineage')) return 'data-lineage';
     if (p.startsWith('/etl-performance')) return 'etl-performance';
     return 'dashboard';
@@ -88,12 +86,11 @@ export default function AppShell({ user, onLogout, unreadCount = 0, setUnreadCou
               alerts: '/alerts',
               predictions: '/predictions',
               notifications: '/notifications',
-              imports: '/imports',
               users: '/users',
               'etl-monitor': '/etl-monitor',
               duplicates: '/duplicates',
               'audit-logs': '/audit-logs',
-              'data-coverage': '/data-coverage',
+
               'data-lineage': '/data-lineage',
               'etl-performance': '/etl-performance',
             };

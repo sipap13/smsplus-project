@@ -1,9 +1,8 @@
-/* eslint-disable react/prop-types */
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
-  BarChart, Bar, Legend,
+  BarChart, Bar,
 } from 'recharts';
 import { fetchAuditLogs, fetchAuditStats } from '../api/auditLogs';
 import Modal from '../components/Modal';
@@ -19,7 +18,6 @@ export default function AuditLog() {
   const [stats, setStats] = useState(null);
   const [graphStats, setGraphStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   // Filters
   const [filters, setFilters] = useState({
@@ -147,153 +145,118 @@ export default function AuditLog() {
   };
 
   return (
-    <div className="page">
-      <div className="page-header tt-page-head">
+    <div className="page" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="page-title">Logs d'audit</h1>
-          <p className="page-subtitle">Suivi complet de l'activité du système</p>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Logs d&apos;Audit Système</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Traçabilité complète de toutes les actions utilisateurs et système</p>
         </div>
+        <button className="btn btn-soft" style={{ height: '38px', fontSize: '0.85rem' }} onClick={() => loadData()}>
+          Rafraîchir
+        </button>
       </div>
 
       {/* KPI Cards */}
       {stats && (
-        <div className="kpi-grid-4" style={{ marginBottom: '1.5rem' }}>
-          <div className="kpi-card tt-kpi">
-            <p className="field-label">Total actions</p>
-            <h3>{formatCompactNumber(stats.total_actions)}</h3>
-          </div>
-          <div className="kpi-card tt-kpi">
-            <p className="field-label">Logins aujourd'hui</p>
-            <h3>{stats.logins_aujourd_hui}</h3>
-          </div>
-          <div className="kpi-card tt-kpi">
-            <p className="field-label">Top Utilisateur</p>
-            <h3 style={{ fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stats.top_utilisateur}</h3>
-          </div>
-          <div className="kpi-card tt-kpi" style={{ borderTop: `3px solid ${stats.actions_echec > 5 ? 'var(--danger)' : 'var(--success)'}` }}>
-            <p className="field-label">Échecs</p>
-            <h3 style={{ color: stats.actions_echec > 5 ? 'var(--danger)' : 'inherit' }}>{stats.actions_echec}</h3>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          {[
+            { label: 'Total actions', value: formatCompactNumber(stats.total_actions), color: '#6366f1' },
+            { label: "Logins aujourd'hui", value: stats.logins_aujourd_hui, color: '#10b981' },
+            { label: 'Top utilisateur', value: stats.top_utilisateur, color: '#f59e0b', small: true },
+            { label: 'Échecs', value: stats.actions_echec, color: stats.actions_echec > 5 ? '#ef4444' : '#10b981' },
+          ].map(k => (
+            <div key={k.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '14px', padding: '1rem 1.25rem' }}>
+              <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{k.label}</p>
+              <p style={{ margin: '4px 0 0', fontWeight: 800, fontSize: k.small ? '0.9rem' : '1.2rem', color: k.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.value}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Advanced Filters */}
-      <div className="surface surface-pad" style={{ marginBottom: '1.5rem' }}>
-        <div className="grid-4" style={{ gap: '1rem', alignItems: 'flex-end' }}>
-          <div className="field">
-            <label className="field-label">Recherche</label>
-            <input 
-              className="field-control" 
-              placeholder="Description..." 
-              value={filters.search}
-              onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">Action</label>
-            <select 
-              className="field-control"
-              value={filters.action}
-              onChange={e => setFilters(f => ({ ...f, action: e.target.value }))}
-            >
-              <option value="">Toutes</option>
-              <option value="login">Login</option>
-              <option value="logout">Logout</option>
-              <option value="create">Create</option>
-              <option value="update">Update</option>
-              <option value="delete">Delete</option>
-              <option value="export">Export</option>
-              <option value="import">Import</option>
-              <option value="2fa_success">2FA Succès</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="field-label">Statut</label>
-            <select 
-              className="field-control"
-              value={filters.statut}
-              onChange={e => setFilters(f => ({ ...f, statut: e.target.value }))}
-            >
-              <option value="">Tous</option>
-              <option value="succes">Succès</option>
-              <option value="echec">Échec</option>
-              <option value="warning">Warning</option>
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-soft" style={{ flex: 1 }} onClick={resetFilters}>Réinitialiser</button>
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => loadData()}>Filtrer</button>
-          </div>
-        </div>
+      {/* Filters */}
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '14px', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+        <input
+          placeholder="🔍 Rechercher dans les descriptions…"
+          value={filters.search}
+          onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+          onKeyDown={e => e.key === 'Enter' && loadData()}
+          style={{ flex: '2 1 200px', height: '36px', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 12px', fontSize: '0.85rem', background: 'var(--bg-surface)', color: 'var(--text-main)' }}
+        />
+        {[  
+          { key: 'action', placeholder: 'Action', opts: ['login','logout','create','update','delete','export','import','2fa_success'] },
+          { key: 'statut', placeholder: 'Statut', opts: ['succes','echec','warning'] },
+        ].map(f => (
+          <select key={f.key} value={filters[f.key]} onChange={e => setFilters(prev => ({ ...prev, [f.key]: e.target.value }))}
+            style={{ height: '36px', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 10px', fontSize: '0.85rem', background: 'var(--bg-surface)', color: 'var(--text-main)', cursor: 'pointer' }}>
+            <option value="">— {f.placeholder} —</option>
+            {f.opts.map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
+          </select>
+        ))}
+        <input type="date" value={filters.date_debut} onChange={e => setFilters(f => ({ ...f, date_debut: e.target.value }))}
+          style={{ height: '36px', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 10px', fontSize: '0.85rem', background: 'var(--bg-surface)', color: 'var(--text-main)' }} />
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>→</span>
+        <input type="date" value={filters.date_fin} onChange={e => setFilters(f => ({ ...f, date_fin: e.target.value }))}
+          style={{ height: '36px', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 10px', fontSize: '0.85rem', background: 'var(--bg-surface)', color: 'var(--text-main)' }} />
+        {Object.values(filters).some(Boolean) && (
+          <button onClick={resetFilters} style={{ height: '36px', padding: '0 14px', borderRadius: '8px', border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.82rem' }}>✕ Reset</button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{meta.total.toLocaleString()} logs</span>
       </div>
 
       {/* Main Table */}
-      <div className="surface" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table-hover">
-            <thead>
-              <tr>
-                <th>Date/Heure</th>
-                <th>Utilisateur</th>
-                <th>Rôle</th>
-                <th>Action</th>
-                <th>Entité</th>
-                <th>Description</th>
-                <th>IP</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>Chargement...</td></tr>
-              ) : logs.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>Aucun log trouvé.</td></tr>
-              ) : (
-                logs.map(log => (
-                  <tr key={log.id} onClick={() => setSelectedLog(log)} style={{ cursor: 'pointer' }}>
-                    <td style={{ fontSize: '0.85rem' }}>{formatDate(log.created_at)}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {getAvatar(log.user_email)}
-                        <span style={{ fontSize: '0.85rem' }}>{log.user_email || 'Système'}</span>
-                      </div>
-                    </td>
-                    <td>{getRoleBadge(log.user_role)}</td>
-                    <td>{getActionBadge(log.action)}</td>
-                    <td><span className="chip">{log.entite}</span></td>
-                    <td style={{ maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>
-                      {log.description}
-                    </td>
-                    <td className="mono" style={{ fontSize: '0.8rem' }}>{log.ip_address}</td>
-                    <td style={{ textAlign: 'center' }}>{getStatutIcon(log.statut)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: '3rem', textAlign: 'center' }}><div className="spinner" /></div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-surface)' }}>
+                  {['Date/Heure', 'Utilisateur', 'Rôle', 'Action', 'Entité', 'Description', 'IP', 'Statut'].map(h => (
+                    <th key={h} style={{ padding: '0.7rem 1rem', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {logs.length === 0 ? (
+                  <tr><td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Aucun log trouvé.</td></tr>
+                ) : (
+                  logs.map(log => (
+                    <tr key={log.id} onClick={() => setSelectedLog(log)}
+                      style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '0.7rem 1rem', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{formatDate(log.created_at)}</td>
+                      <td style={{ padding: '0.7rem 1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {getAvatar(log.user_email)}
+                          <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{log.user_email || 'Système'}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '0.7rem 1rem' }}>{getRoleBadge(log.user_role)}</td>
+                      <td style={{ padding: '0.7rem 1rem' }}>{getActionBadge(log.action)}</td>
+                      <td style={{ padding: '0.7rem 1rem' }}><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', background: 'var(--bg-surface)', padding: '2px 8px', borderRadius: '6px', color: 'var(--text-muted)' }}>{log.entite}</span></td>
+                      <td style={{ padding: '0.7rem 1rem', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{log.description}</td>
+                      <td style={{ padding: '0.7rem 1rem', fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{log.ip_address}</td>
+                      <td style={{ padding: '0.7rem 1rem', textAlign: 'center', fontSize: '1rem' }}>{getStatutIcon(log.statut)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
-        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Total : {meta.total} logs
-          </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
-              className="btn btn-ghost" 
-              disabled={meta.current_page === 1}
-              onClick={() => handlePageChange(meta.current_page - 1)}
-            >
-              Précédent
-            </button>
-            <span style={{ alignSelf: 'center', fontWeight: 600 }}>{meta.current_page} / {meta.last_page}</span>
-            <button 
-              className="btn btn-ghost" 
-              disabled={meta.current_page === meta.last_page}
-              onClick={() => handlePageChange(meta.current_page + 1)}
-            >
-              Suivant
-            </button>
+        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-surface)' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{meta.total.toLocaleString()} logs au total</span>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button className="btn btn-soft" style={{ height: '32px', fontSize: '0.8rem' }} disabled={meta.current_page <= 1} onClick={() => handlePageChange(meta.current_page - 1)}>← Préc.</button>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>{meta.current_page} / {meta.last_page || 1}</span>
+            <button className="btn btn-soft" style={{ height: '32px', fontSize: '0.8rem' }} disabled={meta.current_page >= (meta.last_page || 1)} onClick={() => handlePageChange(meta.current_page + 1)}>Suiv. →</button>
           </div>
         </div>
       </div>
@@ -304,7 +267,7 @@ export default function AuditLog() {
           <div className="surface surface-pad">
             <h3 className="text-heading" style={{ marginBottom: '1rem', fontSize: '1rem' }}>Activité par heure (24h)</h3>
             <div style={{ width: '100%', height: 250 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
                 <AreaChart data={graphStats.by_hour}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis 
@@ -322,7 +285,7 @@ export default function AuditLog() {
           <div className="surface surface-pad">
             <h3 className="text-heading" style={{ marginBottom: '1rem', fontSize: '1rem' }}>Activité par jour (7j)</h3>
             <div style={{ width: '100%', height: 250 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
                 <BarChart data={graphStats.by_day}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis 
@@ -420,7 +383,7 @@ export default function AuditLog() {
 
       {meta.total > 10000 && (
         <div style={{ marginTop: '1rem', color: 'var(--warning)', fontSize: '0.85rem', textAlign: 'center' }}>
-          ⚠ Retention : Plus de 10 000 logs d'audit enregistrés. Pensez à l'archivage.
+          ⚠ Retention : Plus de 10 000 logs d&apos;audit enregistrés. Pensez à l&apos;archivage.
         </div>
       )}
     </div>

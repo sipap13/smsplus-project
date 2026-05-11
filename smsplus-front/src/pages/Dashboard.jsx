@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+﻿/* eslint-disable react/prop-types */
 import { useEffect, useState, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import {
@@ -159,6 +159,15 @@ const TrafficChart = ({ startDate, endDate, label }) => {
     fetchData();
   }, [startDate, endDate, granularity]);
 
+  // Normalise data: ensure valeur_capped always exists so Bar dataKey never points at undefined
+  const normalizedData = useMemo(() =>
+    data.map(d => ({
+      ...d,
+      valeur_capped: d.valeur_capped !== undefined ? d.valeur_capped : d.occ,
+    })),
+    [data]
+  );
+
   const stats = useMemo(() => {
     if (data.length === 0) return null;
     const totalMmg = data.reduce((acc, d) => acc + d.mmg, 0);
@@ -169,7 +178,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
     return { totalMmg, totalOcc, avgEcart, pic, meanOcc };
   }, [data]);
 
-  const CustomTooltip = ({ active, payload, label: xLabel }) => {
+  const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const d = payload[0].payload;
       return (
@@ -181,36 +190,17 @@ const TrafficChart = ({ startDate, endDate, label }) => {
           fontSize: '12px',
           lineHeight: '1.8',
           boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
-          border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b'
+          border: '1px solid #1e293b'
         }}>
-          <div style={{ fontWeight: 700, marginBottom: '6px' }}>
-            📅 {d.label}
-          </div>
-          
-          {d.is_outlier && (
-            <div style={{ color: '#fbbf24', marginBottom: '6px', fontSize: '11px', fontWeight: 600 }}>
-              ⚠ Valeur exceptionnelle (z-score = {d.z_score})
-            </div>
-          )}
-          
+          <div style={{ fontWeight: 700, marginBottom: '6px' }}>📅 {d.label}</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
             <span style={{ color: '#94a3b8' }}>MMG :</span>
             <span style={{ fontWeight: 700 }}>{formatCompactNumber(d.mmg)} CDR</span>
           </div>
-          
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
             <span style={{ color: '#94a3b8' }}>OCC :</span>
-            <span style={{ fontWeight: 700, color: d.is_outlier ? '#fbbf24' : '#6366f1' }}>
-              {formatCompactNumber(d.occ)} CDR
-            </span>
+            <span style={{ fontWeight: 700, color: '#6366f1' }}>{formatCompactNumber(d.occ)} CDR</span>
           </div>
-
-          {d.is_outlier && (
-            <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>
-              Affiché plafonné à : {formatCompactNumber(d.valeur_capped)} CDR
-            </div>
-          )}
-          
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', borderTop: '1px solid #1e293b', paddingTop: '4px', marginTop: '4px' }}>
             <span style={{ color: '#94a3b8' }}>Écart :</span>
             <span style={{ fontWeight: 700, color: d.ecart_pct > 5 ? '#ef4444' : '#10b981' }}>
@@ -221,20 +211,6 @@ const TrafficChart = ({ startDate, endDate, label }) => {
       );
     }
     return null;
-  };
-
-  const renderCustomBar = (props) => {
-    const { x, y, width, height, is_outlier, fill } = props;
-    if (is_outlier) {
-      return (
-        <g>
-          <rect x={x} y={y} width={width} height={height} fill={fill} opacity={0.7} />
-          <line x1={x} y1={y} x2={x + width} y2={y} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 2" />
-          <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10} fill="#f59e0b">▲</text>
-        </g>
-      );
-    }
-    return <rect x={x} y={y} width={width} height={height} fill={fill} />;
   };
 
 
@@ -278,8 +254,8 @@ const TrafficChart = ({ startDate, endDate, label }) => {
       </div>
 
       <div style={{ width: '100%', height: 350 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-          <ComposedChart key={granularity} data={data}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
+          <ComposedChart key={granularity} data={normalizedData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} />
@@ -288,11 +264,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
             
             {options.mmg && <Bar dataKey="mmg" name="MMG" fill="#1e2f74" radius={[4, 4, 0, 0]} maxBarSize={30} />}
             {options.occ && (
-              <Bar dataKey="valeur_capped" name="OCC" radius={[4, 4, 0, 0]} maxBarSize={30} shape={renderCustomBar}>
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : (entry.ecart_pct > 5 ? '#ef4444' : '#6366f1')} />
-                ))}
-              </Bar>
+              <Bar dataKey="occ" name="OCC" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={30} />
             )}
 
             
@@ -310,6 +282,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
     </div>
   );
 };
@@ -384,7 +357,7 @@ const RevenusChart = ({ startDate, endDate }) => {
       </div>
 
       <div style={{ width: '100%', height: 350 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
           <AreaChart key={`${granularite}-${service}`} data={data}>
             <defs>
               {colors.map((c, i) => (
@@ -582,7 +555,7 @@ const SubscriberDistribution = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Répartition par offre" subtitle="PREPAID vs HYBRID" />
       <div style={{ height: '220px', minHeight: '220px', display: 'flex', alignItems: 'center' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
           <PieChart>
             <Pie
               data={data}
@@ -671,7 +644,7 @@ const HourlyActivityChart = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Activité par heure" subtitle="Volume CDR moyen par heure de la journée" />
       <div style={{ height: '200px', minHeight: '200px' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="hour" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
@@ -761,7 +734,7 @@ const RoamingDistribution = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Local vs Roaming" subtitle="Volume CDR par type de connexion" />
       <div style={{ height: '220px', minHeight: '220px' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
           <PieChart>
             <Pie
               data={data}
@@ -837,7 +810,7 @@ const ComparisonChart = ({ startDate, endDate }) => {
     <div className="surface surface-pad" style={{ marginBottom: '24px', border: '1px solid var(--primary)', background: 'var(--bg-surface)' }}>
        <CardHeader title="⇄ Comparaison de tendances" subtitle="Superposition de la période actuelle (Bleu) vs précédente (Gris)" />
        <div style={{ height: '300px', width: '100%' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height={300} minWidth={0} debounce={50}>
             <AreaChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
@@ -858,84 +831,15 @@ const ComparisonChart = ({ startDate, endDate }) => {
 export default function Dashboard({ user }) {
   const { periode, setPreset, setCustom, setPeriode } = usePeriode();
   const [compare, setCompare] = useState(false);
-  const [showOutliers, setShowOutliers] = useState(true);
-  const [outlierStats, setOutlierStats] = useState(null);
 
-
-  // Banner component for outliers
-  const OutlierBanner = ({ outliers }) => {
-    if (!outliers || outliers.length === 0 || !showOutliers) return null;
-    return (
-      <div style={{
-        background: '#fffbeb',
-        border: '1px solid #fde68a',
-        borderRadius: '12px',
-        padding: '12px 20px',
-        marginBottom: '24px',
-        fontSize: '14px',
-        color: '#92400e',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(251, 191, 36, 0.1)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '20px' }}>⚠️</span>
-          <span>
-            <strong>Valeurs exceptionnelles détectées :</strong> le {outliers.join(', ')}. 
-            Les graphiques ont été plafonnés pour maintenir une lisibilité optimale. 
-            Survolez les indicateurs ⚠️ pour voir les valeurs réelles.
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {outliers.includes('2026-04-15') && (
-            <button
-              onClick={() => window.open(`${api.defaults.baseURL}/dashboard/download-report/correction_15042026.txt`, '_blank')}
-              style={{
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              📥 Télécharger Rapport Correction
-            </button>
-          )}
-          <button
-            onClick={() => setShowOutliers(false)}
-            style={{
-              background: '#d97706',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'background 0.2s'
-            }}
-          >
-            Masquer l'alerte
-          </button>
-        </div>
-      </div>
-    );
-  };
 
 
   useEffect(() => {
-    // On mount, check if current period has data. If empty, adjust to max available date.
     const checkRange = async () => {
       try {
         const res = await api.get('/dashboard/range');
         const maxDate = res.data.max_date;
         if (maxDate && (new Date(periode.startDate) > new Date(maxDate))) {
-           // Current period is beyond data, reset to last 7 days of data
            const start = format(subDays(parseISO(maxDate), 7), 'yyyy-MM-dd');
            setPeriode({
              preset: 'custom',
@@ -946,17 +850,7 @@ export default function Dashboard({ user }) {
         }
       } catch (err) { console.error(err); }
     };
-
     checkRange();
-
-    // Fetch global stats for outlier detection
-    const fetchOutliers = async () => {
-      try {
-        const res = await api.get(`/dashboard/revenus-enrichi?days=30`);
-        if (res.data.stats) setOutlierStats(res.data.stats);
-      } catch (err) { console.error(err); }
-    };
-    fetchOutliers();
   }, [periode]);
 
 
@@ -981,8 +875,6 @@ export default function Dashboard({ user }) {
         setPreset={setPreset} 
         setCustom={setCustom} 
       />
-
-      <OutlierBanner outliers={outlierStats?.outliers} />
 
 
       {compare && <ComparisonChart startDate={periode.startDate} endDate={periode.endDate} />}

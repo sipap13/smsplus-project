@@ -469,7 +469,7 @@ export default function Predictions() {
         <div className="surface surface-pad" style={{ marginBottom: '1.2rem' }}>
           <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Historique &amp; Predictions</h3>
           <div style={{ width: '100%', height: 320, minHeight: 320 }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height={320} minWidth={0} debounce={50}>
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval="preserveStartEnd" angle={-30} textAnchor="end" height={50} />
