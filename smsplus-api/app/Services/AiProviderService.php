@@ -100,7 +100,12 @@ class AiProviderService
     private function callGemini(string $system, string $user, int $maxTokens): string
     {
         $model = config('services.gemini.model', 'gemini-1.5-flash');
-        $url   = config('services.gemini.url') . $model . ':generateContent?key=' . config('services.gemini.api_key');
+        $baseUrl = config('services.gemini.url');
+        
+        // Clean up model name if it contains "models/" prefix
+        $modelName = str_replace('models/', '', $model);
+        
+        $url = $baseUrl . $modelName . ':generateContent?key=' . config('services.gemini.api_key');
 
         $response = Http::withHeaders(['Content-Type' => 'application/json'])
             ->timeout((int) config('services.gemini.timeout', 30))
@@ -112,6 +117,17 @@ class AiProviderService
                     ['category' => 'HARM_CATEGORY_DANGEROUS_CONTENT', 'threshold' => 'BLOCK_NONE'],
                 ],
             ]);
+
+        // If v1beta fails, try v1
+        if (!$response->successful() && str_contains($baseUrl, 'v1beta')) {
+            $v1Url = str_replace('v1beta', 'v1', $baseUrl) . $modelName . ':generateContent?key=' . config('services.gemini.api_key');
+            $response = Http::withHeaders(['Content-Type' => 'application/json'])
+                ->timeout((int) config('services.gemini.timeout', 30))
+                ->post($v1Url, [
+                    'contents' => [['role' => 'user', 'parts' => [['text' => $system . "\n\n" . $user]]]],
+                    'generationConfig' => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.1, 'topP' => 0.8, 'topK' => 40],
+                ]);
+        }
 
         if (!$response->successful()) throw new \RuntimeException('Gemini HTTP ' . $response->status() . ': ' . $response->body());
         $content = trim($response->json('candidates.0.content.parts.0.text', ''));
@@ -127,18 +143,27 @@ class AiProviderService
 
     private function generateStatisticalFallback(string $systemPrompt, string $userMessage, ?array $data): string
     {
-        // Generate basic statistical predictions based on historical data
+        // 1. If it's a SQL generation request
+        if (str_contains(strtolower($systemPrompt), 'sql') || str_contains(strtolower($systemPrompt), 'select')) {
+            // Return a safe SQL query that returns a generic count or empty set
+            // to avoid crashing the ChatbotService
+            if (str_contains(strtolower($userMessage), 'mmg')) {
+                return "SELECT 'MMG' as source, COUNT(*) as nb FROM ra_t_mmg_cdr_det WHERE start_date >= CURRENT_DATE - INTERVAL '7 days'";
+            }
+            return "SELECT 'OCC' as source, COUNT(*) as nb FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days'";
+        }
+
+        // 2. If it's a prediction request with data
         if (strpos($userMessage, 'prédictions') !== false && $data && isset($data['historique'])) {
             $historique = $data['historique'];
             if (count($historique) > 0) {
                 $lastWeekRevenue = array_sum(array_column(array_slice($historique, -7), 'total_revenus'));
                 $avgDailyRevenue = $lastWeekRevenue / 7;
                 
-                // Generate simple statistical predictions
                 $predictions = [];
                 for ($i = 1; $i <= 7; $i++) {
                     $date = date('Y-m-d', strtotime("+$i days"));
-                    $variation = (rand(80, 120) / 100); // ±20% variation
+                    $variation = (rand(80, 120) / 100);
                     $predictedRevenue = $avgDailyRevenue * $variation;
                     
                     $predictions[] = [
@@ -162,6 +187,11 @@ class AiProviderService
                     'ai_fallback' => true
                 ]);
             }
+        }
+
+        // 3. If it's a response generation request (summarizing results)
+        if (str_contains(strtolower($systemPrompt), 'assistant') || str_contains(strtolower($systemPrompt), 'explique')) {
+            return "Désolé, les services d'intelligence artificielle sont actuellement surchargés. Basé sur les données brutes, voici ce que j'ai trouvé. (Note: Cette réponse est générée en mode secours).";
         }
         
         // Default fallback response
@@ -218,6 +248,7 @@ class AiProviderService
         try {
             DB::table('ra_t_etl_jobs')->insert([
                 'job_name'   => 'ai_fallback_' . $provider,
+                'category'   => 'AI',
                 'status'     => 'fallback',
                 'error_message' => substr($reason, 0, 500),
                 'started_at'    => now(),

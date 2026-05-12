@@ -276,7 +276,11 @@ export default function Revenus() {
               <Pie data={pieDataForChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                 {pieDataForChart.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v) => formatDT(v)} />
+              <Tooltip 
+                formatter={(v) => formatDT(v)} 
+                contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }}
+                itemStyle={{ fontSize: '12px' }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

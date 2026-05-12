@@ -198,6 +198,7 @@ class PredictionController extends Controller
             DB::table('ra_t_etl_jobs')->updateOrInsert(
                 ['job_name' => $jobName],
                 [
+                    'category' => 'PREDICTION',
                     'status' => $status,
                     'started_at' => now(),
                     'finished_at' => $status === 'success' ? now() : null,

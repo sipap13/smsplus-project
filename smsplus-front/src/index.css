@@ -46,6 +46,12 @@
   --toolbar-bg: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
   --toolbar-border: var(--border);
 
+  /* Glassmorphism Light */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.05);
+  --glass-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --glass-blur: 12px;
+
   /* legacy */
   --tt-nav: var(--bg-elevated);
   --tt-nav-2: var(--bg-elevated);
@@ -140,10 +146,11 @@ body {
   --toolbar-bg: rgba(15, 23, 42, 0.8);
   --toolbar-border: var(--border);
 
-  /* Glassmorphism additions */
-  --glass-bg: rgba(15, 23, 42, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  /* Glassmorphism Dark */
+  --glass-bg: rgba(15, 23, 42, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  --glass-blur: 16px;
 }
 
 *,
@@ -179,6 +186,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
   min-height: 100%;
+  position: relative;
+}
+
+:is(html, body).theme-dark body {
+  background: 
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(56, 189, 248, 0.03) 0%, transparent 40%),
+    var(--bg-page);
+}
+
+.theme-light body {
+  background: 
+    radial-gradient(circle at 0% 0%, rgba(11, 102, 195, 0.02) 0%, transparent 40%),
+    var(--bg-page);
 }
 
 .num,
@@ -236,6 +257,92 @@ textarea {
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
+/* ═══════════════════════════════════════
+   GLASS & MICRO-INTERACTIONS
+   ═══════════════════════════════════════ */
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius);
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.4, 1), 
+              box-shadow 0.2s ease, 
+              border-color 0.2s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-4px) scale(1.005);
+  border-color: rgba(var(--primary), 0.3);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.25);
+}
+
+.interactive-element {
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.4, 1), filter 0.15s ease;
+}
+
+.interactive-element:active {
+  transform: scale(0.96);
+}
+
+.interactive-element:hover {
+  filter: brightness(1.1);
+}
+
+/* Specific Sidebar Glass */
+.sidebar-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--glass-border);
+}
+
+/* Specific Navbar Glass */
+.navbar-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* Modern Hover States */
+.modern-hover {
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: -1;
+}
+
+.modern-hover:hover::after {
+  opacity: 0.1;
+}
+
+/* Shimmer Effect for Loading or Highlighting */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, 
+    transparent 25%, 
+    rgba(255, 255, 255, 0.05) 50%, 
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.5s infinite linear;
+}
+
 /* Console form controls */
 input,
 select,
@@ -262,6 +369,37 @@ textarea:disabled {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
+}
+
+.glass-card, .panel, .surface, .kpi-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.4, 1), 
+              box-shadow 0.22s ease, 
+              border-color 0.22s ease,
+              background 0.22s ease;
+}
+
+.surface-pad {
+  padding: 1.1rem;
+}
+
+.glass-card:hover, .panel:hover, .surface:hover, .kpi-card:hover {
+  transform: translateY(-5px) scale(1.008);
+  border-color: rgba(var(--primary), 0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+  background: color-mix(in srgb, var(--glass-bg) 95%, white);
+}
+
+:is(html, body).theme-dark .glass-card:hover, 
+:is(html, body).theme-dark .panel:hover, 
+:is(html, body).theme-dark .surface:hover, 
+:is(html, body).theme-dark .kpi-card:hover {
+  background: color-mix(in srgb, var(--glass-bg) 95%, var(--primary));
 }
 
 .field-control {
@@ -1750,20 +1888,10 @@ td {
   padding: 0.4rem 0.8rem;
 }
 
-.panel {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
-}
+/* Surfaces globalisées plus haut */
 
-.surface {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
+
+
 
 .surface-pad {
   padding: 1.1rem;
@@ -4973,9 +5101,7 @@ td {
   transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
-.surface {
-  border-radius: 14px;
-}
+
 
 .panel:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
@@ -5342,8 +5468,44 @@ textarea {
 }
 
 .notif-foot .btn {
-  font-size: 0.82rem;
-  width: 100%;
   display: flex;
   justify-content: center;
+}
+
+/* ── Custom Glass Tooltip ── */
+[data-tooltip] {
+  position: relative;
+  cursor: pointer;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  padding: 10px 14px;
+  background: rgba(20, 25, 45, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: pre-line;
+  width: max-content;
+  max-width: 280px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.4, 1);
+  box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+  z-index: 1000;
+  text-align: left;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }

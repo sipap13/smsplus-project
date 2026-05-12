@@ -15,8 +15,8 @@ const C_HISTO = '#3b82f6';
 const C_PRED = '#f59e0b';
 const C_CONF = 'rgba(245, 158, 11, 0.25)';
 const C_MOY = '#94a3b8';
-const JOURS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-const JOURS_SHORT = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const JOURS_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 function useFadeIn() {
   const ref = useRef(null);
@@ -273,22 +273,22 @@ export default function Predictions() {
             fromCache: true,
           });
         }
-      } else { 
-        setError('Erreur chargement predictions'); 
+      } else {
+        setError('Erreur chargement predictions');
       }
 
-      if (svcRes.status === 'fulfilled') { 
-        setServices(svcRes.value.data || []); 
+      if (svcRes.status === 'fulfilled') {
+        setServices(svcRes.value.data || []);
       }
-    } catch (err) { 
-      setError('Erreur chargement API'); 
-    } finally { 
-      setLoading(false); 
+    } catch (err) {
+      setError('Erreur chargement API');
+    } finally {
+      setLoading(false);
     }
   }, [horizon, keywordFilter, providerInfo]);
 
-  useEffect(() => { 
-    load(); 
+  useEffect(() => {
+    load();
   }, [horizon, keywordFilter]);
 
   const handleRefresh = () => {
@@ -324,7 +324,7 @@ export default function Predictions() {
     { title: `Total predit ${horizon}j`, value: resume.total_predit ? formatDT(resume.total_predit) : '—', sub: resume.comparaison_semaine_precedente_pct !== undefined ? <span style={{ color: resume.comparaison_semaine_precedente_pct >= 0 ? '#16a34a' : '#dc2626' }}>{resume.comparaison_semaine_precedente_pct >= 0 ? '↑' : '↓'} {Math.abs(resume.comparaison_semaine_precedente_pct).toFixed(1)}% vs sem. prec.</span> : null, color: '#8b5cf6' },
     { title: 'Meilleur jour predit', value: resume.meilleur_jour ? formatDT(resume.meilleur_jour.montant) : '—', sub: resume.meilleur_jour ? `${JOURS_SHORT[new Date(resume.meilleur_jour.date).getDay()]} ${resume.meilleur_jour.date.slice(8)}/${resume.meilleur_jour.date.slice(5, 7)}` : null, color: '#16a34a' },
     { title: 'Pire jour predit', value: resume.pire_jour ? formatDT(resume.pire_jour.montant) : '—', sub: resume.pire_jour ? `${JOURS_SHORT[new Date(resume.pire_jour.date).getDay()]} ${resume.pire_jour.date.slice(8)}/${resume.pire_jour.date.slice(5, 7)}` : null, color: '#dc2626' },
-      { title: 'Score fiabilite IA', value: <div style={{ width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><RadialBarChart width={80} height={80} cx="50%" cy="50%" innerRadius="60%" outerRadius="90%" data={[{ name: 'Score', value: score, fill: score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#dc2626' }]}><RadialBar dataKey="value" background clockWise /></RadialBarChart></div>, sub: <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Fiabilite IA</span>, color: '#f59e0b' },
+    { title: 'Score fiabilite IA', value: <div style={{ width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><RadialBarChart width={80} height={80} cx="50%" cy="50%" innerRadius="60%" outerRadius="90%" data={[{ name: 'Score', value: score, fill: score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#dc2626' }]}><RadialBar dataKey="value" background clockWise /></RadialBarChart></div>, sub: <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Fiabilite IA</span>, color: '#f59e0b' },
     { title: 'Volatilite historique', value: metriques.volatilite !== undefined ? `${metriques.volatilite}%` : '—', sub: metriques.volatilite !== undefined ? <VolatilityBadge vol={metriques.volatilite} /> : null, color: '#06b6d4' },
   ];
 
@@ -386,9 +386,9 @@ export default function Predictions() {
               <ReliabilityBadge score={score} />
               {isFallback && <span className="badge badge-warn">Fallback</span>}
               {providerInfo && (
-                <ProviderBadge 
-                  provider={providerInfo.provider} 
-                  model={providerInfo.model} 
+                <ProviderBadge
+                  provider={providerInfo.provider}
+                  model={providerInfo.model}
                   fromCache={providerInfo.fromCache}
                   cachedAt={providerInfo.loadedAt}
                 />
@@ -455,7 +455,7 @@ export default function Predictions() {
       <FadeSection>
         <div className="kpi-grid-3" style={{ marginBottom: '1.2rem' }}>
           {kpiCards.map((k, i) => (
-            <div key={i} className="kpi-card" style={{ borderTop: `3px solid ${k.color}` }}>
+            <div key={i} className="glass-card kpi-card" style={{ borderTop: `3px solid ${k.color}` }}>
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500 }}>{k.title}</p>
               <div style={{ margin: '0.4rem 0 0', fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-heading)' }}>{k.value}</div>
               {k.sub && <div style={{ marginTop: '0.5rem', fontSize: '0.82rem' }}>{k.sub}</div>}
@@ -466,7 +466,7 @@ export default function Predictions() {
 
       {/* CHART */}
       <FadeSection>
-        <div className="surface surface-pad" style={{ marginBottom: '1.2rem' }}>
+        <div className="glass-card panel surface-pad" style={{ marginBottom: '1.2rem' }}>
           <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Historique &amp; Predictions</h3>
           <div style={{ width: '100%', height: 320, minHeight: 320 }}>
             <ResponsiveContainer width="100%" height={320} minWidth={0} debounce={50}>
@@ -496,14 +496,14 @@ export default function Predictions() {
 
       {/* TABLE */}
       <FadeSection>
-        <div className="panel table-wrap" style={{ marginBottom: '1.2rem', overflow: 'hidden' }}>
+        <div className="glass-card panel table-wrap" style={{ marginBottom: '1.2rem', overflow: 'hidden' }}>
           <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
             <h3 className="text-heading" style={{ margin: 0, fontSize: '1rem' }}>Details des predictions</h3>
           </div>
           <table className="table-mobile" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Date','Jour','Predit','Min','Max','Confiance','Tendance','Facteurs'].map(h => (
+                {['Date', 'Jour', 'Predit', 'Min', 'Max', 'Confiance', 'Tendance', 'Facteurs'].map(h => (
                   <th key={h} style={{ padding: '0.75rem 0.85rem', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
                 ))}
               </tr>
@@ -526,8 +526,18 @@ export default function Predictions() {
                     <td data-label="Tendance" style={{ padding: '0.65rem 0.85rem' }}><TrendIcon trend={p.tendance} variation={p.variation_pct} /></td>
                     <td data-label="Facteurs" style={{ padding: '0.65rem 0.85rem' }}>
                       {p.facteurs?.length > 0 ? (
-                        <span title={p.facteurs.join(', ')} style={{ cursor: 'help', fontSize: '0.78rem', color: 'var(--primary)' }}>Voir ({p.facteurs.length})</span>
-                      ) : '—'}
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <span
+                            className="badge badge-soft"
+                            style={{ cursor: 'pointer', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            data-tooltip={p.facteurs.join('\n• ')}
+                          >
+                            🔍 {p.facteurs.length} facteur{p.facteurs.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Aucun</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -555,7 +565,7 @@ export default function Predictions() {
                 const part = totalAll > 0 ? Math.round((s.revenus_predit_7j / totalAll) * 100) : 0;
                 const borderColor = s.tendance === 'hausse' ? '#16a34a' : s.tendance === 'baisse' ? '#dc2626' : '#94a3b8';
                 return (
-                  <div key={i} className="kpi-card" style={{ borderLeft: `3px solid ${borderColor}` }}>
+                  <div key={i} className="glass-card kpi-card" style={{ borderLeft: `3px solid ${borderColor}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-heading)' }}>{s.keyword} &middot; {s.nom_service}</span>
                       <span className="badge" style={{ fontSize: '0.7rem' }}>{part}% du total</span>
@@ -621,7 +631,7 @@ export default function Predictions() {
               {recommandations.map((r, i) => {
                 const priorityColor = r.priorite === 'haute' ? '#dc2626' : r.priorite === 'moyenne' ? '#f59e0b' : '#16a34a';
                 return (
-                  <div key={i} className="kpi-card" style={{ borderLeft: `3px solid ${priorityColor}` }}>
+                  <div key={i} className="glass-card kpi-card" style={{ borderLeft: `3px solid ${priorityColor}` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 6 }}>
                       <span className="badge" style={{ background: priorityColor + '15', borderColor: priorityColor + '50', color: priorityColor, fontSize: '0.7rem', textTransform: 'uppercase' }}>
                         {r.priorite}
@@ -640,16 +650,18 @@ export default function Predictions() {
 
       {/* METHODOLOGIE */}
       <FadeSection>
-        <Accordion title="Methodologie & Avertissement" icon="📋">
-          <p style={{ margin: '0 0 0.75rem' }}>{data?.methodologie || 'Analyse basee sur les tendances historiques.'}</p>
-          <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-            ⚠️ Les predictions sont indicatives et basees sur l historique disponible. Elles ne constituent pas une garantie de performance future.
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span className="badge badge-ok">Propulse par Groq AI &middot; Llama3</span>
-            {isFallback && <span className="badge badge-warn">Mode fallback actif</span>}
-          </div>
-        </Accordion>
+        <div className="glass-card panel" style={{ padding: '1rem' }}>
+          <Accordion title="Methodologie & Avertissement" icon="📋">
+            <p style={{ margin: '0 0 0.75rem' }}>{data?.methodologie || 'Analyse basee sur les tendances historiques.'}</p>
+            <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              ⚠️ Les predictions sont indicatives et basees sur l historique disponible. Elles ne constituent pas une garantie de performance future.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="badge badge-ok">Propulse par Groq IA &middot; Llama3</span>
+              {isFallback && <span className="badge badge-warn">Mode fallback actif</span>}
+            </div>
+          </Accordion>
+        </div>
       </FadeSection>
 
     </div>

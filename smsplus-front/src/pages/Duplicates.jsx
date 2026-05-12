@@ -446,7 +446,10 @@ export default function Duplicates() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip 
+                    contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
+                    itemStyle={{ fontSize: '12px' }}
+                  />
                   <Legend verticalAlign="bottom" height={36}/>
                 </PieChart>
               </ResponsiveContainer>
@@ -465,7 +468,10 @@ export default function Duplicates() {
                     tickFormatter={(val) => val.split('-').slice(1).reverse().join('/')} 
                   />
                   <YAxis fontSize={10} />
-                  <Tooltip />
+                  <Tooltip 
+                    contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
+                    itemStyle={{ fontSize: '12px' }}
+                  />
                   <Bar dataKey="count" fill="var(--primary-1)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

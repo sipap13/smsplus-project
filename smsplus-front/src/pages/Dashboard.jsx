@@ -1,4 +1,4 @@
-﻿/* eslint-disable react/prop-types */
+/* eslint-disable react/prop-types */
 import { useEffect, useState, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import {
@@ -55,7 +55,7 @@ const GlobalPeriodControls = ({ periode, setPreset, setCustom }) => {
   };
 
   return (
-    <div className="surface" style={{ padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '24px', background: 'var(--bg-elevated)' }}>
+    <div className="glass-card" style={{ padding: '16px 20px', marginBottom: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           📅 Période d'analyse
@@ -132,7 +132,7 @@ const GlobalPeriodControls = ({ periode, setPreset, setCustom }) => {
 const TrafficChart = ({ startDate, endDate, label }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [granularity, setGranularity] = useState('day');
+  const [granularity, setGranularity] = useState('week');
   const [options, setOptions] = useState({ mmg: true, occ: true, ecart: false, moyenne: true });
 
   const fetchData = async () => {
@@ -151,7 +151,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
     // Auto granularity only if date range changes significantly
     const diff = differenceInDays(new Date(endDate), new Date(startDate));
     if (diff <= 2) setGranularity('hour');
-    else if (diff >= 60) setGranularity('week');
+    else if (diff >= 7) setGranularity('week');
     else setGranularity('day');
   }, [startDate, endDate]);
 
@@ -215,7 +215,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
 
 
   return (
-    <div className="surface surface-pad" style={{ marginBottom: '1.2rem', position: 'relative' }}>
+    <div className="glass-card surface-pad" style={{ marginBottom: '1.2rem', position: 'relative' }}>
       <CardHeader title="Trafic MMG vs OCC" subtitle={`Volume CDR · ${label}`}>
         <select 
           className="select-sm" 
@@ -291,7 +291,7 @@ const RevenusChart = ({ startDate, endDate }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [service, setService] = useState('all');
-  const [granularite, setGranularity] = useState('day');
+  const [granularite, setGranularity] = useState('week');
   
   const { services: mappedServices } = useServiceMapping();
 
@@ -307,6 +307,13 @@ const RevenusChart = ({ startDate, endDate }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const diff = differenceInDays(new Date(endDate), new Date(startDate));
+    if (diff <= 2) setGranularity('hour');
+    else if (diff >= 7) setGranularity('week');
+    else setGranularity('day');
+  }, [startDate, endDate]);
 
   useEffect(() => {
     fetchData();
@@ -525,7 +532,7 @@ const MmgSuccessCard = ({ startDate, endDate }) => {
   }, [data]);
 
   return (
-    <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="glass-card surface-pad">
       <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Taux de succès MMG</h3>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', margin: '15px 0' }}>
         <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-main)' }}>{stats.rate}%</span>
@@ -552,7 +559,7 @@ const SubscriberDistribution = ({ startDate, endDate }) => {
   }, [startDate, endDate]);
 
   return (
-    <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="glass-card surface-pad">
       <CardHeader title="Répartition par offre" subtitle="PREPAID vs HYBRID" />
       <div style={{ height: '220px', minHeight: '220px', display: 'flex', alignItems: 'center' }}>
           <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>

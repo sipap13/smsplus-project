@@ -20,7 +20,8 @@ const pageTitles = {
   '/etl-monitor': 'ETL Monitor',
   '/duplicates': 'Doublons CDR',
   '/audit-logs': 'Logs d\'audit',
-
+  '/data-coverage': 'Audit Couverture Données',
+  '/imports': 'Importation CDR',
   '/data-lineage': 'Data Lineage Interactive',
   '/etl-performance': 'Performance ETL',
 };

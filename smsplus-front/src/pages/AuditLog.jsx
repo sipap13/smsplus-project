@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
@@ -276,7 +276,11 @@ export default function AuditLog() {
                     tick={{ fontSize: 10 }}
                   />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip labelFormatter={(v) => formatDate(v)} />
+                  <Tooltip 
+                    labelFormatter={(v) => formatDate(v)} 
+                    contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }}
+                    itemStyle={{ fontSize: '12px' }}
+                  />
                   <Area type="monotone" dataKey="count" stroke="var(--primary)" fill="var(--primary-soft)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -294,7 +298,11 @@ export default function AuditLog() {
                     tick={{ fontSize: 10 }}
                   />
                   <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip labelFormatter={(v) => new Date(v).toLocaleDateString('fr-FR')} />
+                  <Tooltip 
+                    labelFormatter={(v) => new Date(v).toLocaleDateString('fr-FR')} 
+                    contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }}
+                    itemStyle={{ fontSize: '12px' }}
+                  />
                   <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

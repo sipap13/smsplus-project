@@ -77,7 +77,7 @@ export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 
   ];
 
   return (
-    <div className="app-sidebar">
+    <div className="app-sidebar sidebar-glass">
       <div className="tt-sidebar-brand" onClick={() => onNavigate('dashboard')} style={{ cursor: 'pointer' }}>
         <img src="/tt-logo-sidebar-clean.png" alt="Tunisie Telecom" className="tt-logo sidebar" onError={(e) => { e.target.style.display='none'; }} />
         <div>

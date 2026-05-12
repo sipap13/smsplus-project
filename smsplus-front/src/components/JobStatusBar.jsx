@@ -209,14 +209,14 @@ function CompactBar({ jobs, title }) {
   const hasFailed = jobs.some((j) => j.status === 'failed');
 
   // Determine background color based on status
-  let bgColor = '#f0f9ff'; // default blue light
+  let bgColor = 'rgba(59, 130, 246, 0.08)'; // default blue light
   let borderColor = '#3b82f6';
 
   if (hasFailed) {
-    bgColor = '#fef2f2';
+    bgColor = 'rgba(220, 38, 38, 0.08)';
     borderColor = '#dc2626';
   } else if (runningJob) {
-    bgColor = '#fef3c7';
+    bgColor = 'rgba(245, 158, 11, 0.08)';
     borderColor = '#f59e0b';
   }
 
@@ -660,10 +660,10 @@ function InlineTimeline({ jobs, steps }) {
   return (
     <div
       style={{
-        background: '#f8fafc',
+        background: 'var(--bg-elevated)',
         borderRadius: '8px',
         padding: '16px',
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--border)',
         marginTop: '0.75rem',
       }}
     >
@@ -692,7 +692,7 @@ function InlineTimeline({ jobs, steps }) {
           left: '20px',
           right: '20px',
           height: '2px',
-          background: '#e2e8f0',
+          background: 'var(--border)',
           zIndex: 1,
         }} />
 
@@ -702,7 +702,7 @@ function InlineTimeline({ jobs, steps }) {
           const isRunning = job?.status === 'running';
           const stepColor = isDone ? STATUS_COLORS.success :
             isRunning ? STATUS_COLORS.running :
-              '#e2e8f0';
+              'var(--border)';
 
           return (
             <div key={step.jobName} style={{ zIndex: 2 }}>
@@ -713,7 +713,7 @@ function InlineTimeline({ jobs, steps }) {
                   height: '24px',
                   borderRadius: '50%',
                   background: stepColor,
-                  border: '3px solid white',
+                  border: '3px solid var(--bg-surface)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

@@ -11,10 +11,11 @@ const PAGES = [
   { id: 'services', label: 'Services VAS', path: '/services', hint: 'Navigation' },
   { id: 'revenus', label: 'Revenus détaillés', path: '/revenus', hint: 'Navigation' },
   { id: 'predictions', label: 'Prédictions IA', path: '/predictions', hint: 'Navigation' },
-  { id: 'etl-monitor', label: 'ETL Monitor', path: '/etl-monitor', hint: 'Navigation' },
   { id: 'duplicates', label: 'Doublons CDR', path: '/duplicates', hint: 'Navigation' },
   { id: 'audit-logs', label: 'Logs d\'audit', path: '/audit-logs', hint: 'Navigation' },
-  { id: 'data-coverage', label: 'Audit Couverture Données', path: '/data-coverage', hint: 'Navigation' },
+  { id: 'imports', label: 'Importation CDR', path: '/imports', hint: 'Navigation' },
+  { id: 'data-lineage', label: 'Data Lineage Interactive', path: '/data-lineage', hint: 'Navigation' },
+  { id: 'etl-performance', label: 'Performance ETL', path: '/etl-performance', hint: 'Navigation' },
   { id: 'notifications', label: 'Notifications', path: '/notifications', hint: 'Navigation' },
   { id: 'users', label: 'Utilisateurs', path: '/users', hint: 'Navigation' },
 ];
@@ -35,10 +36,12 @@ export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'lig
   const [services, setServices] = useState([]);
 
   useEffect(() => {
-    import('../api/axios').then(({ default: api }) => {
-      api.get('/services').then(res => setServices(res.data)).catch(() => {});
-    });
-  }, []);
+    if (open) {
+      import('../api/axios').then(({ default: api }) => {
+        api.get('/services').then(res => setServices(res.data)).catch(() => {});
+      });
+    }
+  }, [open]);
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -94,7 +97,7 @@ export default function Navbar({ title, breadcrumb, user, onLogout, theme = 'lig
 
   return (
     <>
-      <header className="tt-navbar">
+      <header className="tt-navbar navbar-glass">
         <div className="tt-navbar-left">
           <div className="tt-breadcrumb">{breadcrumb}</div>
           <h1 className="tt-navbar-title">{title}</h1>

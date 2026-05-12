@@ -8,6 +8,10 @@ use Throwable;
 
 class ChatbotService
 {
+    public function __construct(protected AiProviderService $aiProvider)
+    {
+    }
+
     public function analyzeQuestion(string $question, object $user): array
     {
         $question = trim($question);
@@ -16,6 +20,7 @@ class ChatbotService
         }
 
         $sql = $this->generateSqlQuery($question, $user->role);
+        \Illuminate\Support\Facades\Log::info("[Chatbot] SQL generated for '{$question}': {$sql}");
         $results = $this->executeQuery($sql);
         $summary = $this->summarizeResults($results);
         $response = $this->generateResponse($question, $summary);
@@ -32,25 +37,8 @@ class ChatbotService
     {
         $prompt = $this->buildSqlPrompt($userRole);
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$this->getGroqApiKey(),
-            'Content-Type' => 'application/json',
-        ])->timeout(30)->connectTimeout(30)->retry(2, 500)->post($this->getGroqEndpoint(), [
-            'model' => $this->getGroqModel(),
-            'messages' => [
-                ['role' => 'system', 'content' => $prompt],
-                ['role' => 'user',   'content' => $question],
-            ],
-            'temperature' => 0,
-            'max_tokens' => 400,
-            'top_p' => 1,
-        ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('Groq SQL generation failed: '.$response->body());
-        }
-
-        $sql = trim($response->json('choices.0.message.content', ''));
+        $aiResponse = $this->aiProvider->complete($prompt, $question, 400, 0);
+        $sql = trim($aiResponse['content']);
         $sql = $this->normalizeSql($sql, $userRole);
 
         return $this->cleanSql($sql);
@@ -167,25 +155,8 @@ class ChatbotService
         $prompt .= 'Ne parle pas de la requete SQL. ';
         $prompt .= 'Utilise uniquement le resume JSON suivant : '.json_encode($summary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).'.';
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$this->getGroqApiKey(),
-            'Content-Type' => 'application/json',
-        ])->timeout(30)->connectTimeout(30)->retry(2, 500)->post($this->getGroqEndpoint(), [
-            'model' => $this->getGroqModel(),
-            'messages' => [
-                ['role' => 'system', 'content' => $prompt],
-                ['role' => 'user',   'content' => $question],
-            ],
-            'temperature' => 0.6,
-            'max_tokens' => 400,
-            'top_p' => 1,
-        ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('Groq response generation failed: '.$response->body());
-        }
-
-        return trim($response->json('choices.0.message.content', ''));
+        $aiResponse = $this->aiProvider->complete($prompt, $question, 400, 0.6);
+        return trim($aiResponse['content']);
     }
 
     protected function executeQuery(string $sql): array
@@ -202,9 +173,10 @@ class ChatbotService
     protected function summarizeResults(array $results): array
     {
         return [
-            'count' => count($results),
+            'total_count' => count($results),
             'columns' => count($results) > 0 ? array_keys($results[0]) : [],
-            'sample' => array_slice($results, 0, 10),
+            'sample' => array_slice($results, 0, 50),
+            'note' => count($results) > 50 ? "Les données ont été tronquées à 50 lignes sur un total de " . count($results) : "Toutes les données correspondantes sont incluses."
         ];
     }
 
@@ -279,6 +251,8 @@ class ChatbotService
         $prompt .= 'Ne fournis aucune explication. Reponds uniquement avec la requete SQL brute, sans bloc markdown. ';
         $prompt .= "CONTEXTE COMMERCIAL DES SERVICES :\n$mapping\n";
         $prompt .= "Si l'utilisateur demande un service par son nom commercial (ex: Shofha), utilise le Keyword technique correspondant (ex: mb1) dans la clause WHERE sur ra_t_occ_cdr_detail.keyword ou ra_t_mmg_cdr_det.service_type.\n";
+        $prompt .= "IMPORTANT : Pour les questions d'analyse (ex: 'le plus actif', 'total des revenus', 'top 5'), effectue TOUJOURS l'agrégation directement en SQL (GROUP BY, COUNT, SUM, ORDER BY, LIMIT). Ne renvoie jamais une liste brute si un calcul est possible. Récupère au moins le TOP 5 des résultats pour avoir du contexte même si l'utilisateur en demande un seul.\n";
+        $prompt .= "CONSEIL DE RÉPONSE : Si tes résultats SQL sont limités par un LIMIT ou un TOP, ne dis pas à l'utilisateur que c'est 'le seul' résultat disponible. Dis plutôt que c'est le premier ou le plus important.\n";
         $prompt .= 'REGLES ABSOLUES sur les colonnes — respecte-les strictement ou la requete sera en erreur : ';
 
         // ── Table OCC (schema exact) ───────────────────────────────────────────
@@ -290,9 +264,7 @@ class ChatbotService
 
         if (! empty($enums['occ_keywords'])) {
             $list = implode(', ', array_map(fn ($v) => "'$v'", $enums['occ_keywords']));
-            $first = $enums['occ_keywords'][0];
-            $prompt .= "Valeurs reelles de keyword dans OCC : $list. ";
-            $prompt .= "Exemple correct OCC : WHERE ra_t_occ_cdr_detail.keyword = '$first'. ";
+            $prompt .= "[POUR RÉFÉRENCE UNIQUEMENT] Valeurs réelles de keyword dans OCC : $list. ";
         }
 
         // ── Table MMG (schema exact) ───────────────────────────────────────────
@@ -304,9 +276,7 @@ class ChatbotService
 
         if (! empty($enums['mmg_services'])) {
             $list = implode(', ', array_map(fn ($v) => "'$v'", $enums['mmg_services']));
-            $first = $enums['mmg_services'][0];
-            $prompt .= "Valeurs reelles de service_type dans MMG : $list. ";
-            $prompt .= "Exemple correct MMG : WHERE ra_t_mmg_cdr_det.service_type = '$first'. ";
+            $prompt .= "[POUR RÉFÉRENCE UNIQUEMENT] Valeurs réelles de service_type dans MMG : $list. ";
         }
 
         // ── Montants ───────────────────────────────────────────────────────────
@@ -322,12 +292,20 @@ class ChatbotService
 
         // ── Droits par role ───────────────────────────────────────────────────
         if ($userRole === 'ANALYSTE_OP') {
-            $prompt .= "L'utilisateur a acces aux deux tables OCC et MMG.";
+            $prompt .= "L'utilisateur a acces aux deux tables OCC et MMG. ";
         } elseif ($userRole === 'ANALYSTE_BUSS') {
-            $prompt .= "L'utilisateur a acces UNIQUEMENT a OCC (ra_t_occ_cdr_detail). N'utilise que ra_t_occ_cdr_detail.";
+            $prompt .= "L'utilisateur a acces UNIQUEMENT a OCC (ra_t_occ_cdr_detail). N'utilise que ra_t_occ_cdr_detail. ";
         } else {
-            $prompt .= "L'utilisateur a acces aux deux tables disponibles.";
+            $prompt .= "L'utilisateur a acces aux deux tables disponibles. ";
         }
+
+        $prompt .= "\nINSTRUCTIONS FINALES : ";
+        $prompt .= "1. Pour les questions d'analyse (ex: 'le plus actif', 'top', 'total'), effectue TOUJOURS l'agrégation en SQL (GROUP BY, COUNT, SUM, ORDER BY). ";
+        $prompt .= "2. Inclus TOUJOURS la colonne de calcul (ex: SELECT a_msisdn, COUNT(*) as nb_appels) pour que l'IA puisse voir les chiffres. ";
+        $prompt .= "3. Utilise TOUJOURS 'LIMIT 10' (au minimum) pour les classements. ";
+        $prompt .= "4. Si l'utilisateur demande 'le plus actif' sans préciser la table, cherche dans les DEUX tables (OCC et MMG) via un UNION ALL. ";
+        $prompt .= "5. NE FILTRE PAS par un service spécifique (keyword = ...) sauf si l'utilisateur le demande explicitement. ";
+        $prompt .= "6. Si tes résultats sont limités par un LIMIT, ne dis JAMAIS que c'est le 'seul' résultat de la base.";
 
         return trim($prompt);
     }
