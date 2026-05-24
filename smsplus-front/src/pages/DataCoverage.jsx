@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 
 const TABLE_META = {
-  ra_t_occ_cdr_detail: { icon: '📡', label: 'Détails OCC CDR', color: '#6366f1' },
-  ra_t_mmg_cdr_det:    { icon: '📶', label: 'Détails MMG CDR', color: '#8b5cf6' },
-  ra_t_services:       { icon: '🏷️', label: 'Catalogue Services', color: '#10b981' },
-  ra_t_alerts:         { icon: '🔔', label: 'Alertes', color: '#ef4444' },
+  ra_t_occ_cdr_detail: { icon: 'Ⓞ', label: 'Détails OCC CDR', color: '#1e3a5f' },
+  ra_t_mmg_cdr_det:    { icon: 'Ⓜ', label: 'Détails MMG CDR', color: '#2a5082' },
+  ra_t_services:       { icon: '🏷️', label: 'Catalogue Services', color: '#3b6fa0' },
+  ra_t_alerts:         { icon: '🔔', label: 'Alertes', color: '#4a8ec2' },
 };
 
 const ProgressBar = ({ pct, color }) => (
@@ -53,7 +53,7 @@ export default function DataCoverage() {
           {/* Table Coverage Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
             {Object.entries(report.tables).map(([tableName, stats]) => {
-              const meta   = TABLE_META[tableName] || { icon: '🗄️', label: tableName, color: '#64748b' };
+              const meta   = TABLE_META[tableName] || { icon: '🗄️', label: tableName, color: '#3b6fa0' };
               const pctNum = parseFloat(stats.taux_utilisation) || 0;
               const health = pctNum >= 70 ? { label: 'Bonne', color: '#10b981' }
                            : pctNum >= 40 ? { label: 'Moyenne', color: '#f59e0b' }
@@ -132,7 +132,7 @@ export default function DataCoverage() {
           <div style={{
             background: 'var(--bg-elevated)', border: '1px solid var(--border)',
             borderRadius: '16px', padding: '1.5rem',
-            borderLeft: '4px solid #6366f1'
+            borderLeft: '4px solid #1e3a5f'
           }}>
             <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               🚀 Recommandations d'amélioration
@@ -143,7 +143,7 @@ export default function DataCoverage() {
                   display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
                   background: 'var(--bg-surface)', borderRadius: '10px', padding: '0.85rem 1rem'
                 }}>
-                  <span style={{ color: '#6366f1', fontWeight: 800, flexShrink: 0 }}>#{i + 1}</span>
+                  <span style={{ color: '#1e3a5f', fontWeight: 800, flexShrink: 0 }}>#{i + 1}</span>
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: 1.5 }}>{rec}</span>
                 </div>
               ))}

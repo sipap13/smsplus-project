@@ -409,9 +409,39 @@ class CdrController extends Controller
             return response()->json(['message' => 'MSISDN invalide'], 422);
         }
 
-        $dateFin   = $request->query('date_fin')   ? \Carbon\Carbon::parse($request->query('date_fin'))->format('Y-m-d') : now()->format('Y-m-d');
-        $dateDebut = $request->query('date_debut') ? \Carbon\Carbon::parse($request->query('date_debut'))->format('Y-m-d') : now()->subDays(30)->format('Y-m-d');
-        $source    = in_array($request->query('source'), ['occ', 'mmg', 'all']) ? $request->query('source') : 'all';
+        // Déterminer la date de fin : la plus récente parmi TOUTES les transactions du MSISDN
+        // (en tant qu'appelant a_msisdn OU destinataire b_msisdn, dans OCC et MMG)
+        // On force le cast ::date pour normaliser les timestamps et ::text pour comparaison PHP fiable
+        $latestOcc = DB::table('ra_t_occ_cdr_detail')
+            ->where(function ($w) use ($norm) {
+                $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+            })
+            ->selectRaw("MAX(start_date::date)::text as max_date")
+            ->value('max_date');
+
+        $latestMmg = DB::table('ra_t_mmg_cdr_det')
+            ->where(function ($w) use ($norm) {
+                $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+            })
+            ->selectRaw("MAX(start_date::date)::text as max_date")
+            ->value('max_date');
+
+        $candidates = array_filter([$latestOcc, $latestMmg]);
+        $latestRecord = !empty($candidates) ? max($candidates) : now()->format('Y-m-d');
+
+        Log::info("[Timeline] MSISDN {$norm} — latestOcc={$latestOcc} latestMmg={$latestMmg} → dateFin={$latestRecord}");
+
+        $dateFin   = $request->query('date_fin')
+            ? \Carbon\Carbon::parse($request->query('date_fin'))->format('Y-m-d')
+            : $latestRecord;
+
+        $dateDebut = $request->query('date_debut')
+            ? \Carbon\Carbon::parse($request->query('date_debut'))->format('Y-m-d')
+            : \Carbon\Carbon::parse($dateFin)->subDays(60)->format('Y-m-d');
+
+        Log::info("[Timeline] Fenêtre: {$dateDebut} → {$dateFin}");
+
+        $source = in_array($request->query('source'), ['occ', 'mmg', 'all']) ? $request->query('source') : 'all';
 
         $services = DB::table('ra_t_services')
             ->whereNotNull('keyword')
@@ -423,13 +453,16 @@ class CdrController extends Controller
 
         if ($source === 'occ' || $source === 'all') {
             $occRows = DB::table('ra_t_occ_cdr_detail')
-                ->where('a_msisdn', $norm)
+                ->where(function ($w) use ($norm) {
+                    $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+                })
                 ->whereBetween('start_date', [$dateDebut, $dateFin])
                 ->orderByDesc('start_date')
                 ->orderByDesc('start_hour')
                 ->limit(200)
                 ->get([
                     'id',
+                    'a_msisdn',
                     'start_date',
                     'start_hour',
                     'orig_start_time',
@@ -442,10 +475,12 @@ class CdrController extends Controller
                 ]);
 
             foreach ($occRows as $row) {
-                $dt = $this->buildDatetime($row->start_date, $row->start_hour, $row->orig_start_time);
+                $dt   = $this->buildDatetime($row->start_date, $row->start_hour, $row->orig_start_time);
+                $role = ($row->a_msisdn === $norm) ? 'appelant' : 'destinataire';
                 $items[] = [
                     'id'              => (int) $row->id,
                     'source'          => 'OCC',
+                    'role'            => $role,
                     'date'            => $row->start_date,
                     'heure'           => (int) $row->start_hour,
                     'datetime'        => $dt,
@@ -463,13 +498,16 @@ class CdrController extends Controller
 
         if ($source === 'mmg' || $source === 'all') {
             $mmgRows = DB::table('ra_t_mmg_cdr_det')
-                ->where('a_msisdn', $norm)
+                ->where(function ($w) use ($norm) {
+                    $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+                })
                 ->whereBetween('start_date', [$dateDebut, $dateFin])
                 ->orderByDesc('start_date')
                 ->orderByDesc('start_hour')
                 ->limit(200)
                 ->get([
                     'id',
+                    'a_msisdn',
                     'start_date',
                     'start_hour',
                     'orig_start_time',
@@ -482,10 +520,12 @@ class CdrController extends Controller
                 ]);
 
             foreach ($mmgRows as $row) {
-                $dt = $this->buildDatetime($row->start_date, $row->start_hour, $row->orig_start_time);
+                $dt   = $this->buildDatetime($row->start_date, $row->start_hour, $row->orig_start_time);
+                $role = ($row->a_msisdn === $norm) ? 'appelant' : 'destinataire';
                 $items[] = [
                     'id'              => (int) $row->id,
                     'source'          => 'MMG',
+                    'role'            => $role,
                     'date'            => $row->start_date,
                     'heure'           => (int) $row->start_hour,
                     'datetime'        => $dt,
@@ -507,32 +547,71 @@ class CdrController extends Controller
 
         $items = $this->markDuplicates($items);
 
-        $parJour = [];
+        // ── par_jour : requête agrégée SANS limit pour un heat grid précis ──────
+        // On ne peut pas calculer par_jour depuis $items (limité à 200 lignes)
+        $rawParJour = [];
+
+        if ($source === 'occ' || $source === 'all') {
+            $occAgg = DB::table('ra_t_occ_cdr_detail')
+                ->where(function ($w) use ($norm) {
+                    $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+                })
+                ->whereBetween('start_date', [$dateDebut, $dateFin])
+                ->selectRaw("start_date::date as jour, COUNT(*) as nb, SUM(charge_amount) as montant")
+                ->groupByRaw('start_date::date')
+                ->get();
+
+            foreach ($occAgg as $row) {
+                $d = (string) $row->jour;
+                $rawParJour[$d]['date']            = $d;
+                $rawParJour[$d]['nb_transactions'] = ($rawParJour[$d]['nb_transactions'] ?? 0) + (int) $row->nb;
+                $rawParJour[$d]['montant_total']   = ($rawParJour[$d]['montant_total'] ?? 0.0) + (float) $row->montant;
+                $rawParJour[$d]['sources'][]       = 'OCC';
+            }
+        }
+
+        if ($source === 'mmg' || $source === 'all') {
+            $mmgAgg = DB::table('ra_t_mmg_cdr_det')
+                ->where(function ($w) use ($norm) {
+                    $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+                })
+                ->whereBetween('start_date', [$dateDebut, $dateFin])
+                ->selectRaw("start_date::date as jour, COUNT(*) as nb")
+                ->groupByRaw('start_date::date')
+                ->get();
+
+            foreach ($mmgAgg as $row) {
+                $d = (string) $row->jour;
+                $rawParJour[$d]['date']            = $d;
+                $rawParJour[$d]['nb_transactions'] = ($rawParJour[$d]['nb_transactions'] ?? 0) + (int) $row->nb;
+                $rawParJour[$d]['montant_total']   = $rawParJour[$d]['montant_total'] ?? 0.0;
+                $rawParJour[$d]['sources'][]       = 'MMG';
+            }
+        }
+
+        // Déduplication des sources + tri
+        foreach ($rawParJour as $d => &$entry) {
+            $entry['sources'] = array_values(array_unique($entry['sources'] ?? []));
+        }
+        unset($entry);
+
+        $parJour = array_values($rawParJour);
+        usort($parJour, fn ($a, $b) => strcmp($b['date'], $a['date']));
+
+        // Calculs agrégés depuis les vrais totaux (pas depuis $items limité)
+        $totalRevenus     = array_sum(array_column($rawParJour, 'montant_total'));
         $servicesUtilises = [];
-        $totalRevenus = 0;
-        $datesUniques = [];
+        $datesUniques     = [];
 
         foreach ($items as $it) {
-            $d = $it['date'];
-            if (!isset($parJour[$d])) {
-                $parJour[$d] = ['date' => $d, 'nb_transactions' => 0, 'montant_total' => 0.0, 'sources' => []];
-            }
-            $parJour[$d]['nb_transactions']++;
-            $parJour[$d]['montant_total'] += $it['montant'];
-            $parJour[$d]['sources'][] = $it['source'];
-            $parJour[$d]['sources'] = array_values(array_unique($parJour[$d]['sources']));
-
-            $totalRevenus += $it['montant'];
-
             if ($it['service'] && !in_array($it['service'], $servicesUtilises)) {
                 $servicesUtilises[] = $it['service'];
             }
-
+        }
+        foreach ($rawParJour as $d => $_) {
             $datesUniques[$d] = true;
         }
 
-        $parJour = array_values($parJour);
-        usort($parJour, fn ($a, $b) => strcmp($b['date'], $a['date']));
 
         $sortedDates = array_keys($datesUniques);
         sort($sortedDates);
@@ -551,14 +630,16 @@ class CdrController extends Controller
             }
         }
 
+        $totalTransactions = array_sum(array_column($rawParJour, 'nb_transactions'));
+
         try {
             if ($jobId) {
                 $this->monitor->finishJob($jobId, 'success', null, [
-                    'msisdn' => $norm,
-                    'total_transactions' => count($items),
-                    'periode_jours' => count($sortedDates),
-                    'services_utilises' => count($servicesUtilises),
-                    'processed_rows' => count($items),
+                    'msisdn'              => $norm,
+                    'total_transactions'  => $totalTransactions,
+                    'periode_jours'       => count($sortedDates),
+                    'services_utilises'   => count($servicesUtilises),
+                    'processed_rows'      => $totalTransactions,
                 ]);
             }
         } catch (\Exception $e) {
@@ -566,16 +647,17 @@ class CdrController extends Controller
         }
 
         return response()->json([
-            'msisdn'            => $norm,
-            'periode'           => ['debut' => $dateDebut, 'fin' => $dateFin],
-            'total_transactions'=> count($items),
-            'total_revenus'     => round($totalRevenus, 3),
-            'timeline'          => $items,
-            'par_jour'          => $parJour,
-            'services_utilises' => $servicesUtilises,
-            'premier_contact'   => $premierContact,
-            'dernier_contact'   => $dernierContact,
-            'gaps'              => $gaps,
+            'msisdn'             => $norm,
+            'periode'            => ['debut' => $dateDebut, 'fin' => $dateFin],
+            'total_transactions' => $totalTransactions,     // ← vrai total (sans limite)
+            'timeline_shown'     => count($items),          // ← nb d'éléments détaillés (≤200)
+            'total_revenus'      => round($totalRevenus, 3),
+            'timeline'           => $items,
+            'par_jour'           => $parJour,               // ← toujours complet (requête agrégée)
+            'services_utilises'  => $servicesUtilises,
+            'premier_contact'    => $premierContact,
+            'dernier_contact'    => $dernierContact,
+            'gaps'               => $gaps,
         ]);
     }
 

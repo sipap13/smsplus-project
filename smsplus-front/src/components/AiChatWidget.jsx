@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../api/axios';
 
@@ -9,7 +9,7 @@ const suggestions = [
   'Compare OCC vs MMG',
 ];
 
-export default function AiChatWidget({  }) {
+export default function AiChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');

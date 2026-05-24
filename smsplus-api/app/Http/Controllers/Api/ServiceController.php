@@ -353,7 +353,8 @@ class ServiceController extends Controller
                 'nom_fournisseur' => $s->nom_fournisseur,
                 'nom_complet'     => $s->nom_service . ' (' . $s->keyword . ')',
                 'label'           => $s->nom_service . ' — ' . $s->nom_fournisseur,
-            ]);
+            ])
+            ->values();
 
         return response()->json($services);
     }

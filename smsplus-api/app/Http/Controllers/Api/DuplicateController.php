@@ -32,7 +32,7 @@ class DuplicateController extends Controller
                 'keyword',
                 'call_type',
                 DB::raw('COUNT(*) as occurrences'),
-                DB::raw('array_agg(id) as ids'),
+                DB::raw(DB::getDriverName() === 'sqlite' ? 'group_concat(id) as ids' : 'array_agg(id) as ids'),
                 DB::raw('SUM(charge_amount) as revenu_duplique')
             ])
             ->where('start_date', '>=', $dateDebut);
@@ -91,7 +91,7 @@ class DuplicateController extends Controller
                 'event_type',
                 'service_type',
                 DB::raw('COUNT(*) as occurrences'),
-                DB::raw('array_agg(id) as ids'),
+                DB::raw(DB::getDriverName() === 'sqlite' ? 'group_concat(id) as ids' : 'array_agg(id) as ids'),
                 DB::raw('0 as revenu_duplique')
             ])
             ->where('start_date', '>=', $dateDebut);
@@ -126,7 +126,12 @@ class DuplicateController extends Controller
      */
     public function stats(Request $request)
     {
-        $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date') ?: now()->toDateString();
+        $maxDateOcc = DB::table('ra_t_occ_cdr_detail')->max('start_date');
+        $maxDateMmg = DB::table('ra_t_mmg_cdr_det')->max('start_date');
+        $maxDate = max($maxDateOcc ?: '2000-01-01', $maxDateMmg ?: '2000-01-01');
+        if ($maxDate === '2000-01-01') {
+            $maxDate = now()->toDateString();
+        }
         $dateDebut = $request->query('date_debut', date('Y-m-d', strtotime($maxDate . ' -30 days')));
 
         // Total CDRs for the sample period (for rate calculation)
@@ -229,7 +234,8 @@ class DuplicateController extends Controller
             'total_affected' => $occAffectedCdr + $mmgAffectedCdr,
             'total_revenue_impact' => round($occRevenueImpact, 3),
             'total_sample_count' => $totalSampleCount,
-            'date_debut_effective' => $dateDebut
+            'date_debut_effective' => $dateDebut,
+            'date_fin_effective' => $maxDate
         ]);
     }
 
@@ -279,7 +285,8 @@ class DuplicateController extends Controller
     public function supprimerTousOcc(Request $request)
     {
         // Admin uniquement
-        if ($request->user() && $request->user()->role !== 'ADMIN') {
+        $user = $request->attributes->get('auth_user');
+        if ($user && $user->role !== 'ADMIN') {
             return response()->json(['message' => 'Action réservée aux administrateurs'], 403);
         }
 
@@ -288,7 +295,7 @@ class DuplicateController extends Controller
         // Trouver tous les groupes de doublons
         $groups = DB::table('ra_t_occ_cdr_detail')
             ->select([
-                DB::raw('array_agg(id) as ids'),
+                DB::raw(DB::getDriverName() === 'sqlite' ? 'group_concat(id) as ids' : 'array_agg(id) as ids'),
                 DB::raw('SUM(charge_amount) - MAX(charge_amount) as revenue_to_fix')
             ])
             ->where('call_type', 'VAS')

@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import Toast from './Toast';
 
 export default function ToastContainer({ toasts, onClose }) {

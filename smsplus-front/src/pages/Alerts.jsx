@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import Modal from '../components/Modal';
-import JobStatusBar from '../components/JobStatusBar';
 import useServiceMapping from '../hooks/useServiceMapping';
 
 const emptyAlertForm = () => ({
@@ -186,10 +185,7 @@ export default function Alerts() {
                 En cours...
               </>
             ) : (
-              <>
-                <span>⬇</span>
-                Excel
-              </>
+              <>Excel</>
             )}
           </button>
           <button type="button" onClick={() => { setForm(emptyAlertForm()); setShowForm(true); }} className="btn btn-primary">
@@ -198,13 +194,6 @@ export default function Alerts() {
         </div>
       </div>
 
-      {/* ETL Monitoring */}
-      <JobStatusBar
-        jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'notifications_polling']}
-        title="Traitements alertes"
-        compact={true}
-        refreshInterval={10000}
-      />
 
       {msg && (
         <div

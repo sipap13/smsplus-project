@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
-import JobStatusBar from '../components/JobStatusBar';
 import { formatDT } from '../lib/format';
 import useServiceMapping from '../hooks/useServiceMapping';
 
@@ -22,6 +21,7 @@ export default function CdrOcc() {
   const [partner, setPartner] = useState('');
 
   const [subscriberTypes, setSubscriberTypes] = useState([]);
+  const [keywords, setKeywords] = useState([]);
 
   const [applied, setApplied] = useState({
     start_date: '',
@@ -125,8 +125,8 @@ export default function CdrOcc() {
   const { services: mappedServices, getNom } = useServiceMapping();
 
   const cols = [
-    { key: 'a_msisdn', label: 'A MSISDN' },
-    { key: 'b_msisdn', label: 'B MSISDN' },
+    { key: 'a_msisdn', label: 'MSISDN Appelant' },
+    { key: 'b_msisdn', label: 'MSISDN Destinataire' },
     { key: 'start_date', label: 'Date' },
     { key: 'start_hour', label: 'Heure' },
     { key: 'call_type', label: "Type d'appel" },
@@ -205,7 +205,6 @@ export default function CdrOcc() {
           </button>
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Max 10 000 lignes</span>
         </div>
-        <JobStatusBar jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_occ_csv', 'notifications_polling']} title="" compact={false} refreshInterval={10000} mode="dropdown" />
       </div>
 
       {error && (
@@ -224,7 +223,7 @@ export default function CdrOcc() {
         {loading ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Chargement…</p>
         ) : (
-          <table className="table-mobile table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="table-mobile table-dense" style={{ minWidth: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
             <thead>
               <tr>
                 {cols.map((c) => (

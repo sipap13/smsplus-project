@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '../api/axios';
 
@@ -657,24 +657,63 @@ function InlineTimeline({ jobs, steps }) {
 
   const jobMap = new Map((jobs || []).map((j) => [j.job_name, j]));
 
+  // Calculate overall progress
+  // Règle: ne pas afficher l'étape IA (ai_risk_score) comme faite/en cours tant que
+  // msisdn_search_all n'est pas success.
+  const msisdnJob = jobMap.get('msisdn_search_all');
+  const allowAiSteps = msisdnJob?.status === 'success';
+
+  let progressIndex = -1;
+  let allDone = true;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (!allowAiSteps && step.jobName === 'ai_risk_score') {
+      progressIndex = i;
+      allDone = false;
+      break;
+    }
+
+    const job = jobMap.get(step.jobName);
+    if (!job || job.status === 'pending' || job.status === 'running' || job.status === 'failed') {
+      progressIndex = i;
+      allDone = false;
+      break;
+    }
+  }
+
+  let fillPct = 0;
+  if (allDone) {
+    fillPct = 100;
+  } else if (progressIndex !== -1) {
+    const currentStep = steps[progressIndex];
+    const currentJob = jobMap.get(currentStep.jobName);
+    const isRunning = currentJob?.status === 'running';
+    fillPct = (progressIndex / (steps.length - 1)) * 100;
+    if (isRunning) {
+      fillPct += (0.5 / (steps.length - 1)) * 100; // Animate halfway to the next step
+    }
+  }
+
   return (
     <div
       style={{
-        background: 'var(--bg-elevated)',
-        borderRadius: '8px',
-        padding: '16px',
-        border: '1px solid var(--border)',
-        marginTop: '0.75rem',
+        background: 'linear-gradient(145deg, var(--bg-surface) 0%, var(--bg-elevated) 100%)',
+        borderRadius: '16px',
+        padding: '1.5rem',
+        border: '1px solid rgba(99, 102, 241, 0.15)',
+        boxShadow: '0 8px 30px rgba(0,0,0,0.04)',
       }}
     >
       <div style={{
-        fontSize: '0.9rem',
-        fontWeight: 600,
+        fontSize: '1.05rem',
+        fontWeight: 800,
         color: 'var(--text-main)',
-        marginBottom: '12px',
-        textAlign: 'center'
+        marginBottom: '1.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
       }}>
-        Pipeline d&apos;analyse
+        <span style={{ color: '#6366f1', fontSize: '1rem', fontWeight: 900, lineHeight: 1 }}>IA</span> Pipeline d'Analyse IA
       </div>
 
       {/* Horizontal timeline */}
@@ -685,60 +724,94 @@ function InlineTimeline({ jobs, steps }) {
         position: 'relative',
         marginBottom: '16px'
       }}>
-        {/* Connecting line */}
+        {/* Background line */}
         <div style={{
           position: 'absolute',
           top: '50%',
           left: '20px',
           right: '20px',
-          height: '2px',
+          height: '4px',
           background: 'var(--border)',
+          borderRadius: '2px',
           zIndex: 1,
+          transform: 'translateY(-50%)'
+        }} />
+
+        {/* Progress line */}
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '20px',
+          width: `calc(${Math.min(100, Math.max(0, fillPct))}% - 40px * (${Math.min(100, Math.max(0, fillPct))} / 100))`,
+          height: '4px',
+          background: 'linear-gradient(90deg, #6366f1, #3b82f6)',
+          borderRadius: '2px',
+          zIndex: 1,
+          transform: 'translateY(-50%)',
+          transition: 'width 1s ease-in-out'
         }} />
 
         {steps.map((step, index) => {
           const job = jobMap.get(step.jobName);
           const isDone = job?.status === 'success';
           const isRunning = job?.status === 'running';
-          const stepColor = isDone ? STATUS_COLORS.success :
-            isRunning ? STATUS_COLORS.running :
-              'var(--border)';
+          const isFailed = job?.status === 'failed';
+
+          let icon = '○';
+          let bgColor = 'var(--bg-surface)';
+          let borderColor = 'var(--border)';
+          let textColor = 'var(--text-muted)';
+          let pulse = 'none';
+
+          // États de la timeline (emoji conservés)
+          const stepIsAi = step.jobName === 'ai_risk_score';
+          const aiBlocked = stepIsAi && !allowAiSteps;
+
+          if (aiBlocked) {
+            icon = '○';
+            bgColor = 'var(--bg-surface)';
+            borderColor = 'var(--border)';
+            textColor = 'var(--text-muted)';
+          } else if (isDone) {
+            icon = '✓';
+            bgColor = '#10b981';
+            borderColor = '#10b981';
+            textColor = '#fff';
+          } else if (isRunning) {
+            icon = '🔄';
+            bgColor = '#3b82f6';
+            borderColor = '#3b82f6';
+            textColor = '#fff';
+            pulse = 'job-pulse 1.5s infinite';
+          } else if (isFailed) {
+            icon = '⚠';
+            bgColor = '#ef4444';
+            borderColor = '#ef4444';
+            textColor = '#fff';
+          }
 
           return (
-            <div key={step.jobName} style={{ zIndex: 2 }}>
-              {/* Circle */}
+            <div key={step.jobName} style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
               <div
                 style={{
-                  width: '24px',
-                  height: '24px',
+                  width: '28px',
+                  height: '28px',
                   borderRadius: '50%',
-                  background: stepColor,
-                  border: '3px solid var(--bg-surface)',
+                  background: bgColor,
+                  border: `4px solid var(--bg-elevated)`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '12px',
-                  color: 'white',
-                  fontWeight: 700,
-                  animation: isRunning ? 'job-pulse 1.5s infinite' : 'none',
+                  color: textColor,
+                  fontWeight: 800,
+                  boxShadow: isRunning ? '0 0 0 4px rgba(59,130,246,0.2)' : isDone ? '0 0 0 4px rgba(16,185,129,0.1)' : '0 0 0 4px var(--bg-surface)',
+                  animation: pulse,
+                  transition: 'all 0.4s ease'
                 }}
               >
-                {isDone ? '✓' : isRunning ? '🔄' : '○'}
+                {icon}
               </div>
-
-              {/* Arrow between steps */}
-              {index < steps.length - 1 && (
-                <div style={{
-                  position: 'absolute',
-                  left: '32px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: '12px',
-                  color: '#94a3b8',
-                }}>
-                  →
-                </div>
-              )}
             </div>
           );
         })}
@@ -754,6 +827,7 @@ function InlineTimeline({ jobs, steps }) {
           const job = jobMap.get(step.jobName);
           const isDone = job?.status === 'success';
           const isRunning = job?.status === 'running';
+          const isFailed = job?.status === 'failed';
           const isPending = !job || job.status === 'pending';
 
           return (
@@ -762,25 +836,29 @@ function InlineTimeline({ jobs, steps }) {
               style={{
                 flex: 1,
                 textAlign: 'center',
-                fontSize: '0.75rem'
               }}
             >
               <div style={{
-                fontWeight: isRunning ? 600 : 400,
-                color: isDone ? STATUS_COLORS.success :
-                  isRunning ? STATUS_COLORS.running :
-                    'var(--text-muted)',
-                marginBottom: '2px'
+                fontWeight: isRunning || isDone ? 700 : 500,
+                color: isDone ? 'var(--text-main)' :
+                  isRunning ? '#3b82f6' :
+                  isFailed ? '#ef4444' :
+                  'var(--text-muted)',
+                marginBottom: '4px',
+                fontSize: '0.8rem',
+                transition: 'color 0.3s'
               }}>
                 {step.label}
               </div>
               <div style={{
                 fontSize: '0.7rem',
-                color: 'var(--text-muted)'
+                color: isFailed ? '#ef4444' : 'var(--text-muted)',
+                fontWeight: isFailed ? 600 : 400
               }}>
                 {isDone && job?.duration_ms ? formatDuration(job.duration_ms) :
-                  isRunning ? 'En cours' :
-                    isPending ? 'Attente' : ''}
+                  isRunning ? 'En cours...' :
+                  isFailed ? 'Erreur' :
+                  isPending ? 'En attente' : ''}
               </div>
             </div>
           );

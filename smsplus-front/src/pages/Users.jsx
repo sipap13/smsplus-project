@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import Modal from '../components/Modal';
@@ -117,7 +117,7 @@ export default function Users({ user: currentUser }) {
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Gestion des Utilisateurs</h1>
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>{users.length} utilisateurs</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(30, 58, 95, 0.12)', color: '#1e3a5f' }}>{users.length} utilisateurs</span>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>{users.filter(u => u.actif).length} actifs</span>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, padding: '3px 12px', borderRadius: '99px', background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}>{users.filter(u => u.role === 'ADMIN').length} admins</span>
           </div>
@@ -220,10 +220,10 @@ export default function Users({ user: currentUser }) {
             </thead>
             <tbody>
               {users.map(u => {
-                const roleColors = { ADMIN: '#ef4444', ANALYSTE_OP: '#f59e0b', ANALYSTE_BUSS: '#10b981' };
+                const roleColors = { ADMIN: '#ef4444', ANALYSTE_OP: '#3b6fa0', ANALYSTE_BUSS: '#2a5082' };
                 const rColor = roleColors[u.role] || '#64748b';
                 const initials = (u.nom || u.email || '?').slice(0, 2).toUpperCase();
-                const avatarColors = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+                const avatarColors = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9'];
                 const aColor = avatarColors[(u.id || 0) % avatarColors.length];
                 return (
                   <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}

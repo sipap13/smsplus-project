@@ -349,13 +349,17 @@ class DashboardController extends Controller
         $includeData = in_array(strtolower((string) $request->query('include_data', '0')), ['1', 'true', 'yes'], true);
         $months = max(1, min((int) $request->query('months', 12), 36));
 
-        $cacheKey = 'dashboard_revenus_monthly_'.($includeData ? 'with_data' : 'no_data')."_{$months}";
+        $cacheKey = 'dashboard_revenus_monthly_v3_'.($includeData ? 'with_data' : 'no_data')."_{$months}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
         if ($bypassCache) {
             Cache::forget($cacheKey);
         }
 
         $data = Cache::remember($cacheKey, 600, function () use ($months, $includeData, $allowedCallTypes) {
+            $maxDateQuery = DB::table('ra_t_occ_cdr_detail');
+            if (!$includeData) $maxDateQuery->whereIn('call_type', $allowedCallTypes);
+            $maxDate = $maxDateQuery->max('start_date') ?: now()->toDateString();
+            
             $q = DB::table('ra_t_occ_cdr_detail');
             if (! $includeData) {
                 $q->whereIn('call_type', $allowedCallTypes);
@@ -363,7 +367,7 @@ class DashboardController extends Controller
 
             return $q
                 ->selectRaw("TO_CHAR(start_date, 'YYYY-MM') as month, SUM(charge_amount) as total, COUNT(*) as nb_cdr")
-                ->where('start_date', '>=', now()->subMonths($months)->startOfMonth()->toDateString())
+                ->where('start_date', '>=', date('Y-m-d', strtotime($maxDate . " -{$months} months")))
                 ->groupBy(DB::raw("TO_CHAR(start_date, 'YYYY-MM')"))
                 ->orderBy('month')
                 ->get();
@@ -379,16 +383,21 @@ class DashboardController extends Controller
         $days = max(1, min((int) $request->query('days', 30), 365));
         $topN = max(1, min((int) $request->query('topN', 50), 200));
 
-        $cacheKey = 'dashboard_revenus_fournisseur_'.($includeData ? 'with_data' : 'no_data')."_{$days}_{$topN}";
+        $cacheKey = 'dashboard_revenus_fournisseur_v3_'.($includeData ? 'with_data' : 'no_data')."_{$days}_{$topN}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
         if ($bypassCache) {
             Cache::forget($cacheKey);
         }
 
-        $data = Cache::remember($cacheKey, 600, function () use ($includeData, $allowedCallTypes, $days, $topN) {
+        // Bypass cache temporarily to debug the 'no data' issue
+        $data = (function () use ($includeData, $allowedCallTypes, $days, $topN) {
+            $maxDateQuery = DB::table('ra_t_occ_cdr_detail');
+            if (!$includeData) $maxDateQuery->whereIn('call_type', $allowedCallTypes);
+            $maxDate = $maxDateQuery->max('start_date') ?: now()->toDateString();
+
             $q = DB::table('ra_t_occ_cdr_detail as o')
                 ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
-                ->where('o.start_date', '>=', now()->subDays($days)->toDateString());
+                ->where('o.start_date', '>=', date('Y-m-d', strtotime($maxDate . " -{$days} days")));
 
             if (! $includeData) {
                 $q->whereIn('o.call_type', $allowedCallTypes);
@@ -396,11 +405,11 @@ class DashboardController extends Controller
 
             return $q
                 ->selectRaw("COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu') as fournisseur, SUM(o.charge_amount) as total, COUNT(*) as nb_cdr")
-                ->groupBy('fournisseur')
+                ->groupBy(DB::raw("COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu')"))
                 ->orderByDesc('total')
                 ->limit($topN)
                 ->get();
-        });
+        })();
 
         return response()->json($data);
     }
@@ -412,16 +421,21 @@ class DashboardController extends Controller
         $days = max(1, min((int) $request->query('days', 30), 365));
         $topN = max(1, min((int) $request->query('topN', 20), 100));
 
-        $cacheKey = 'dashboard_top_services_'.($includeData ? 'with_data' : 'no_data')."_{$days}_{$topN}";
+        $cacheKey = 'dashboard_top_services_v3_'.($includeData ? 'with_data' : 'no_data')."_{$days}_{$topN}";
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
         if ($bypassCache) {
             Cache::forget($cacheKey);
         }
 
-        $data = Cache::remember($cacheKey, 600, function () use ($includeData, $allowedCallTypes, $days, $topN) {
+        // Bypass cache temporarily to debug the 'no data' issue
+        $data = (function () use ($includeData, $allowedCallTypes, $days, $topN) {
+            $maxDateQuery = DB::table('ra_t_occ_cdr_detail');
+            if (!$includeData) $maxDateQuery->whereIn('call_type', $allowedCallTypes);
+            $maxDate = $maxDateQuery->max('start_date') ?: now()->toDateString();
+
             $q = DB::table('ra_t_occ_cdr_detail as o')
                 ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
-                ->where('o.start_date', '>=', now()->subDays($days)->toDateString());
+                ->where('o.start_date', '>=', date('Y-m-d', strtotime($maxDate . " -{$days} days")));
 
             if (! $includeData) {
                 $q->whereIn('o.call_type', $allowedCallTypes);
@@ -429,12 +443,12 @@ class DashboardController extends Controller
 
             return $q
                 ->selectRaw("COALESCE(NULLIF(s.nom_service,''), COALESCE(NULLIF(o.keyword,''), 'Autre')) as service, COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu') as fournisseur, SUM(o.charge_amount) as total, COUNT(*) as nb_cdr")
-                ->groupBy('service')
-                ->groupBy('fournisseur')
+                ->groupBy(DB::raw("COALESCE(NULLIF(s.nom_service,''), COALESCE(NULLIF(o.keyword,''), 'Autre'))"))
+                ->groupBy(DB::raw("COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu')"))
                 ->orderByDesc('total')
                 ->limit($topN)
                 ->get();
-        });
+        })();
 
         return response()->json($data);
     }
@@ -647,7 +661,8 @@ class DashboardController extends Controller
                     $m = $mmgData->get($b, 0);
                     $results[] = [
                         'date' => $b,
-                        'label' => date('d/m H:i', strtotime($b)),
+                        'label' => date('H:i', strtotime($b)),
+                        'full_label' => date('d/m H:i', strtotime($b)),
                         'occ' => $o,
                         'mmg' => $m,
                         'ecart_pct' => $o > 0 ? round(abs($m - $o) / $o * 100, 1) : 0,
@@ -715,7 +730,8 @@ class DashboardController extends Controller
         $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date') ?: now()->toDateString();
         $endDate = $request->query('end_date', $maxDate);
         $startDate = $request->query('start_date', date('Y-m-d', strtotime($endDate . ' -7 days')));
-        $keyword = $request->query('keyword');
+        $nomService = $request->query('nom_service');
+        $fournisseur = $request->query('fournisseur');
         $granularite = $request->query('granularite', 'day');
 
         // Safety check: if startDate is beyond endDate, reset
@@ -723,16 +739,20 @@ class DashboardController extends Controller
             $startDate = date('Y-m-d', strtotime($endDate . ' -7 days'));
         }
 
-        $cacheKey = "db_revenus_svc_v3_{$startDate}_{$endDate}_{$keyword}_{$granularite}";
+        $cacheKey = "db_revenus_svc_v5_{$startDate}_{$endDate}_{$nomService}_{$fournisseur}_{$granularite}";
 
-        $data = Cache::remember($cacheKey, 300, function() use ($startDate, $endDate, $keyword, $granularite) {
+        $data = Cache::remember($cacheKey, 300, function() use ($startDate, $endDate, $nomService, $fournisseur, $granularite) {
             $query = DB::table('ra_t_occ_cdr_detail as o')
                 ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
                 ->where('o.start_date', '>=', $startDate)
                 ->where('o.start_date', '<=', $endDate);
 
-            if ($keyword) {
-                $query->where('o.keyword', $keyword);
+            if ($nomService) {
+                $query->where('s.nom_service', $nomService);
+            }
+
+            if ($fournisseur) {
+                $query->where('s.nom_fournisseur', $fournisseur);
             }
 
             if ($granularite === 'hour') {
@@ -755,19 +775,24 @@ class DashboardController extends Controller
             $data = $query->get();
 
             $formatLabel = function($bucket) use ($granularite) {
-                if ($granularite === 'hour') return date('d/m H:i', strtotime($bucket));
+                if ($granularite === 'hour') return date('H:i', strtotime($bucket));
                 if ($granularite === 'week') {
-                    // bucket is YYYY-WW, e.g. 2026-18
                     $parts = explode('-', $bucket);
                     return "Sem " . ($parts[1] ?? $bucket);
                 }
                 return date('d/m', strtotime($bucket));
             };
 
-            if ($keyword) {
+            $formatFullLabel = function($bucket) use ($granularite) {
+                if ($granularite === 'hour') return date('d/m H:i', strtotime($bucket));
+                return null;
+            };
+
+            if ($nomService) {
                 return $data->map(fn($item) => [
                     'date' => $item->time_bucket,
                     'label' => $formatLabel($item->time_bucket),
+                    'full_label' => $formatFullLabel($item->time_bucket),
                     'revenus' => round($item->revenus, 2)
                 ]);
             }
@@ -779,6 +804,7 @@ class DashboardController extends Controller
                         $grouped[$bucket] = (object)[
                             'date' => $bucket, 
                             'label' => $formatLabel($bucket), 
+                            'full_label' => $formatFullLabel($bucket),
                             'total' => 0
                         ];
                     }
@@ -821,7 +847,7 @@ class DashboardController extends Controller
         $limit = (int) $request->query('limit', 5);
         $orderBy = $request->query('order_by', 'revenus'); // revenus|nb_cdr|nb_abonnes
 
-        $cacheKey = "db_top_svc_enrichi_{$startDate}_{$endDate}_{$limit}_{$orderBy}";
+        $cacheKey = "db_top_svc_enrichi_v4_{$startDate}_{$endDate}_{$limit}_{$orderBy}";
 
         return Cache::remember($cacheKey, 600, function() use ($startDate, $endDate, $limit, $orderBy) {
             // Calculate previous period
@@ -829,33 +855,44 @@ class DashboardController extends Controller
             $prevEnd = date('Y-m-d', strtotime($startDate . ' -1 day'));
             $prevStart = date('Y-m-d', strtotime($prevEnd . " -".($diff-1)." days"));
 
-            $fetchTop = function($s, $e) use ($limit, $orderBy) {
-                $q = DB::table('ra_t_occ_cdr_detail as o')
-                    ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
-                    ->where('o.start_date', '>=', $s)
-                    ->where('o.start_date', '<=', $e)
-                    ->selectRaw("COALESCE(NULLIF(o.keyword, ''), 'Autre/DATA') as svc_key, COALESCE(s.nom_service, NULLIF(o.keyword, ''), 'Autre/DATA') as nom, SUM(o.charge_amount) as revenus, COUNT(*) as nb_cdr, COUNT(DISTINCT o.a_msisdn) as nb_abonnes")
-                    ->groupBy('svc_key', 'nom');
-                
-                if ($orderBy === 'nb_cdr') $q->orderByDesc('nb_cdr');
-                elseif ($orderBy === 'nb_abonnes') $q->orderByDesc('nb_abonnes');
-                else $q->orderByDesc('revenus');
+            // 1. Fetch current TOP services
+            $currentQuery = DB::table('ra_t_occ_cdr_detail as o')
+                ->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')
+                ->whereBetween('o.start_date', [$startDate, $endDate])
+                ->selectRaw("COALESCE(NULLIF(o.keyword, ''), 'Autre/DATA') as svc_key, COALESCE(s.nom_service, NULLIF(o.keyword, ''), 'Autre/DATA') as nom, SUM(o.charge_amount) as revenus, COUNT(*) as nb_cdr, COUNT(DISTINCT o.a_msisdn) as nb_abonnes")
+                ->groupBy('svc_key', 'nom');
+            
+            if ($orderBy === 'nb_cdr') $currentQuery->orderByDesc('nb_cdr');
+            elseif ($orderBy === 'nb_abonnes') $currentQuery->orderByDesc('nb_abonnes');
+            else $currentQuery->orderByDesc('revenus');
 
-                return $q->limit($limit)->get()->keyBy('svc_key');
-            };
+            $current = $currentQuery->limit($limit)->get();
 
-            $current = $fetchTop($startDate, $endDate);
-            $previous = $fetchTop($prevStart, $prevEnd);
+            // 2. Fetch ALL previous data for the previous period (simple and robust)
+            $previous = DB::table('ra_t_occ_cdr_detail')
+                ->whereBetween('start_date', [$prevStart, $prevEnd])
+                ->selectRaw("keyword, SUM(charge_amount) as revenus, COUNT(*) as nb_cdr, COUNT(DISTINCT a_msisdn) as nb_abonnes")
+                ->groupBy('keyword')
+                ->get()
+                ->keyBy('keyword');
 
             $results = [];
             $rank = 1;
-            foreach ($current as $kw => $item) {
-                $prevItem = $previous->get($kw);
+            foreach ($current as $item) {
+                $kw = $item->svc_key;
+                // Try direct match, or handle the 'Autre/DATA' case
+                $prevItem = $previous->get($kw) ?: $previous->get(''); 
+                
                 $variation = 0;
                 if ($prevItem) {
-                    $old = (float) $prevItem->$orderBy;
-                    $new = (float) $item->$orderBy;
+                    $old = (float) ($prevItem->$orderBy ?? 0);
+                    $new = (float) ($item->$orderBy ?? 0);
                     $variation = $old > 0 ? round((($new - $old) / $old) * 100, 1) : 0;
+                } else {
+                    // Si aucune donnée n'est trouvée pour ce service spécifique mais qu'il y a des données 
+                    // globales dans la période précédente, alors c'est bien une hausse de 100%.
+                    // Sinon, si la période précédente est totalement vide, on affiche 0% pour ne pas fausser l'analyse.
+                    $variation = ($previous->count() > 0) ? 100.0 : 0;
                 }
 
                 $results[] = [

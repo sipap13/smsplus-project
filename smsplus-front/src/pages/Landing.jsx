@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { applyTheme } from '../theme';
@@ -74,32 +74,32 @@ const MODULES = [
     title: 'Tableau de bord',
     desc: 'KPI journaliers, revenus agrégés, comparaison MMG vs OCC et tendances sur 7-30 jours.',
     tag: 'Lecture seule',
-    color: '#3b82f6',
-    bg: '#eff6ff'
+    color: '#1e3a5f',
+    bg: 'rgba(30, 58, 95, 0.1)'
   },
   {
     icon: IconTable,
     title: 'CDR & Journaux',
     desc: 'Journaux OCC/MMG paginés, appels/SMS/VAS détaillés, filtres rapides par service/date.',
     tag: 'Recherche',
-    color: '#8b5cf6',
-    bg: '#f5f3ff'
+    color: '#2a5082',
+    bg: 'rgba(42, 80, 130, 0.1)'
   },
   {
     icon: IconAlerts,
     title: 'Alertes Fraude',
     desc: 'Suivi des anomalies (+20% trafic vs moyenne 7J), seuils paramétrables, statuts ouverts/résolus.',
     tag: 'Seuils paramétrables',
-    color: '#f59e0b',
-    bg: '#fffbeb'
+    color: '#3b6fa0',
+    bg: 'rgba(59, 111, 160, 0.1)'
   },
   {
     icon: IconSearch,
     title: 'MSISDN & Réclamations',
     desc: 'Recherche MSISDN avec résultats OCC/MMG côte à côte, historique transactions, SOS.',
     tag: 'Side-by-side',
-    color: '#10b981',
-    bg: '#ecfdf5'
+    color: '#4a8ec2',
+    bg: 'rgba(74, 142, 194, 0.1)'
   },
 ];
 

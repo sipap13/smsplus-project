@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -9,11 +9,11 @@ import {
 } from 'recharts';
 import { formatDT, formatCompactNumber } from '../lib/format';
 import useServiceMapping from '../hooks/useServiceMapping';
-import JobStatusBar from '../components/JobStatusBar';
+import TooltipBadge from '../components/TooltipBadge';
 
-const C_HISTO = '#3b82f6';
-const C_PRED = '#f59e0b';
-const C_CONF = 'rgba(245, 158, 11, 0.25)';
+const C_HISTO = '#1e3a5f';
+const C_PRED = '#4a8ec2';
+const C_CONF = 'rgba(74, 142, 194, 0.25)';
 const C_MOY = '#94a3b8';
 const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const JOURS_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -80,17 +80,6 @@ function SkeletonTable() {
   );
 }
 
-function ReliabilityBadge({ score }) {
-  let color = '#dc2626'; let label = 'Faible';
-  if (score >= 75) { color = '#16a34a'; label = 'Fiable'; }
-  else if (score >= 50) { color = '#f59e0b'; label = 'Moyenne'; }
-  return (
-    <span className="badge" style={{ background: color + '15', borderColor: color + '50', color, fontWeight: 700, fontSize: '0.85rem' }}>
-      <span className="status-dot" style={{ background: color }} />
-      Fiabilite {score}% &mdash; {label}
-    </span>
-  );
-}
 
 function ConfidenceBar({ pct }) {
   let color = '#dc2626';
@@ -117,64 +106,6 @@ function VolatilityBadge({ vol }) {
   if (vol > 30) { label = 'Elevee'; cls = 'badge-danger'; }
   else if (vol > 15) { label = 'Moderee'; cls = 'badge-warn'; }
   return <span className={'badge ' + cls}>{label}</span>;
-}
-
-function ProviderBadge({ provider, model, fromCache, cachedAt }) {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const getMinutesAgo = (date) => {
-    if (!date) return 0;
-    const diff = now - new Date(date);
-    return Math.max(0, Math.round(diff / 60000));
-  };
-
-  const badgeStyle = {
-    borderRadius: '999px',
-    padding: '3px 12px',
-    fontSize: '12px',
-    fontWeight: 600,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px'
-  };
-
-  let content = null;
-
-  if (provider === 'groq') {
-    content = (
-      <span style={{ ...badgeStyle, background: 'var(--primary-soft)', color: 'var(--primary)', border: '1px solid var(--border)' }}>
-        ⚡ Groq AI · {model}
-      </span>
-    );
-  } else if (provider === 'gemini') {
-    content = (
-      <span style={{ ...badgeStyle, background: 'rgba(22,163,74,0.1)', color: 'var(--success)', border: '1px solid rgba(22,163,74,0.2)' }}>
-        ✦ Gemini Flash
-      </span>
-    );
-  } else if (provider === 'php_fallback') {
-    content = (
-      <span style={{ ...badgeStyle, background: 'rgba(217,119,6,0.1)', color: 'var(--warning)', border: '1px solid rgba(217,119,6,0.2)' }}>
-        ⚠ Calcul statistique
-      </span>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      {content}
-      {fromCache && (
-        <span style={{ color: '#94a3b8', fontSize: '11px' }}>
-          · Depuis le cache · Actualisé il y a {getMinutesAgo(cachedAt)}min
-        </span>
-      )}
-    </div>
-  );
 }
 
 function Accordion({ title, icon, children, defaultOpen = false }) {
@@ -378,38 +309,123 @@ export default function Predictions() {
     <div className="page">
 
       {/* HEADER */}
-      <FadeSection>
-        <div className="page-header" style={{ marginBottom: '0.8rem', alignItems: 'center' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-              <h1 className="page-title" style={{ margin: 0 }}>Predictions IA</h1>
-              <ReliabilityBadge score={score} />
-              {isFallback && <span className="badge badge-warn">Fallback</span>}
-              {providerInfo && (
-                <ProviderBadge
-                  provider={providerInfo.provider}
-                  model={providerInfo.model}
-                  fromCache={providerInfo.fromCache}
-                  cachedAt={providerInfo.loadedAt}
+      <div style={{ position: 'relative', zIndex: 100 }}>
+        <FadeSection>
+          <div className="page-header" style={{ marginBottom: '0.8rem', alignItems: 'center' }}>
+            <div>
+              <h1 className="page-title" style={{ marginBottom: '12px' }}>Predictions IA</h1>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                flexWrap: 'wrap',
+                marginBottom: '16px',
+                position: 'relative',
+                zIndex: 50
+              }}>
+                {/* BOUTON 1 — Fiabilité */}
+                <TooltipBadge
+                  align="left"
+                  label={`Fiabilité ${score}%`}
+                  color={
+                    score >= 75 ? 'green'
+                      : score >= 50 ? 'orange'
+                        : 'gray'
+                  }
+                  tooltip={
+                    `Score de fiabilité : ${score}%\n` +
+                    `\n` +
+                    `${score >= 75
+                      ? '✓ Fiable — basé sur un historique\n  suffisant et une faible volatilité.'
+                      : score >= 50
+                        ? '⚠ Modéré — données limitées\n  ou volatilité élevée.'
+                        : '✗ Faible — moins de 7 jours\n  de données disponibles.'
+                    }\n` +
+                    `\nHistorique : ${data.nb_jours_historique ?? '—'} jours\n` +
+                    `Volatilité : ${metriques.volatilite ?? '—'}%`
+                  }
                 />
-              )}
+
+                {/* BOUTON 2 — Méthode de calcul */}
+                <TooltipBadge
+                  icon={
+                    data.ai_provider === 'groq' ? ''
+                      : data.ai_provider === 'mistral' ? '🌀'
+                        : '⚙'
+                  }
+                  label={
+                    data.ai_provider === 'groq'
+                      ? `Groq · ${data.ai_model ?? 'llama3'}`
+                      : data.ai_provider === 'mistral'
+                        ? `Mistral AI`
+                        : `Calcul statistique`
+                  }
+                  color={
+                    data.ai_provider === 'groq' ? 'blue'
+                      : data.ai_provider === 'mistral' ? 'green'
+                        : 'orange'
+                  }
+                  tooltip={
+                    data.ai_provider === 'groq'
+                      ? `Modèle : ${data.ai_model}\n` +
+                      `Fournisseur : Groq API\n` +
+                      `\nLes prédictions sont générées par\n` +
+                      `un modèle de langage entraîné sur\n` +
+                      `des données financières et télécom.\n` +
+                      `\nTemps de réponse : ~1-3 secondes`
+                      : data.ai_provider === 'mistral'
+                        ? `Modèle : mistral-small-latest\n` +
+                        `Fournisseur : Mistral AI\n` +
+                        `\nFallback automatique activé.\n` +
+                        `Groq était indisponible au moment\n` +
+                        `du calcul.\n` +
+                        `\nTemps de réponse : ~2-5 secondes`
+                        : `Méthode : Calcul statistique PHP\n` +
+                        `\nCombine 4 méthodes :\n` +
+                        `· Moyenne mobile 7j (MA7)\n` +
+                        `· Moyenne mobile 14j (MA14)\n` +
+                        `· Lissage exponentiel (EMA α=0.3)\n` +
+                        `· Régression linéaire\n` +
+                        `\nActivé quand Groq et Mistral\n` +
+                        `sont indisponibles.`
+                  }
+                />
+
+                {/* BOUTON 3 — Fallback */}
+                <TooltipBadge
+                  label="Fallback actif"
+                  color="orange"
+                  visible={data.ai_fallback === true}
+                  tooltip={
+                    `Le provider principal (Groq) était\n` +
+                    `indisponible au moment du calcul.\n` +
+                    `\nChaîne de fallback utilisée :\n` +
+                    `Groq → ${data.ai_provider === 'mistral'
+                      ? '✓ Mistral AI (actif)'
+                      : '✗ Mistral → ✓ Calcul PHP (actif)'
+                    }\n` +
+                    `\nLes prédictions restent indicatives.\n` +
+                    `Actualisez pour retenter Groq.`
+                  }
+                />
+              </div>
+              <p className="page-subtitle" style={{ margin: 0 }}>
+                Prediction IA &middot; Indicatif seulement
+              </p>
             </div>
-            <p className="page-subtitle" style={{ margin: 0 }}>
-              Prediction IA &middot; Indicatif seulement
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              {lastUpdated && (
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  Maj il y a {Math.max(1, Math.round((Date.now() - lastUpdated) / 60000))} min
+                </span>
+              )}
+              <button className="btn btn-soft" onClick={handleRefresh} disabled={loading}>
+                {loading ? '...' : '↻ Refresh'}
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            {lastUpdated && (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                Maj il y a {Math.max(1, Math.round((Date.now() - lastUpdated) / 60000))} min
-              </span>
-            )}
-            <button className="btn btn-soft" onClick={handleRefresh} disabled={loading}>
-              {loading ? '...' : '↻ Refresh'}
-            </button>
-          </div>
-        </div>
-      </FadeSection>
+        </FadeSection>
+      </div>
 
       {/* CONTROLS */}
       <FadeSection>
@@ -434,22 +450,6 @@ export default function Predictions() {
         </div>
       </FadeSection>
 
-      {/* ETL Timeline */}
-      <JobStatusBar
-        mode="timeline"
-        jobTypes={[
-          'prediction_data_collect',
-          'prediction_metrics_calc',
-          'prediction_groq_call',
-          'prediction_cache_save'
-        ]}
-        steps={[
-          { jobName: 'prediction_data_collect', label: 'Collecte données historiques' },
-          { jobName: 'prediction_metrics_calc', label: 'Calcul métriques & tendances' },
-          { jobName: 'prediction_groq_call', label: 'Analyse IA Groq' },
-          { jobName: 'prediction_cache_save', label: 'Mise en cache résultats' },
-        ]}
-      />
 
       {/* KPI CARDS */}
       <FadeSection>
@@ -525,19 +525,24 @@ export default function Predictions() {
                     <td data-label="Confiance" style={{ padding: '0.65rem 0.85rem', minWidth: 100 }}><ConfidenceBar pct={p.confidence_pct || 65} /></td>
                     <td data-label="Tendance" style={{ padding: '0.65rem 0.85rem' }}><TrendIcon trend={p.tendance} variation={p.variation_pct} /></td>
                     <td data-label="Facteurs" style={{ padding: '0.65rem 0.85rem' }}>
-                      {p.facteurs?.length > 0 ? (
-                        <div style={{ position: 'relative', display: 'inline-block' }}>
-                          <span
-                            className="badge badge-soft"
-                            style={{ cursor: 'pointer', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            data-tooltip={p.facteurs.join('\n• ')}
-                          >
-                            🔍 {p.facteurs.length} facteur{p.facteurs.length > 1 ? 's' : ''}
-                          </span>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Aucun</span>
-                      )}
+                      {(() => {
+                        const listFacteurs = Array.isArray(p.facteurs)
+                          ? p.facteurs
+                          : (typeof p.facteurs === 'string' && p.facteurs ? [p.facteurs] : []);
+                        return listFacteurs.length > 0 ? (
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <span
+                              className="badge badge-soft"
+                              style={{ cursor: 'pointer', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              data-tooltip={listFacteurs.join('\n• ')}
+                            >
+                              🔍 {listFacteurs.length} facteur{listFacteurs.length > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Aucun</span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );

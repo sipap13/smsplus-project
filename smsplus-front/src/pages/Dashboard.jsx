@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import {
@@ -8,7 +8,6 @@ import {
   ComposedChart, Line, Cell
 } from 'recharts';
 import { formatCompactNumber, formatDT } from '../lib/format';
-import JobStatusBar from '../components/JobStatusBar';
 import { usePeriode } from '../hooks/usePeriode';
 import { format, parseISO, differenceInDays, subDays } from 'date-fns';
 import { PieChart, Pie, Cell as PieCell } from 'recharts';
@@ -192,7 +191,7 @@ const TrafficChart = ({ startDate, endDate, label }) => {
           boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
           border: '1px solid #1e293b'
         }}>
-          <div style={{ fontWeight: 700, marginBottom: '6px' }}>📅 {d.label}</div>
+          <div style={{ fontWeight: 700, marginBottom: '6px' }}>📅 {d.full_label || d.label}</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
             <span style={{ color: '#94a3b8' }}>MMG :</span>
             <span style={{ fontWeight: 700 }}>{formatCompactNumber(d.mmg)} CDR</span>
@@ -257,18 +256,18 @@ const TrafficChart = ({ startDate, endDate, label }) => {
           <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
           <ComposedChart key={granularity} data={normalizedData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={30} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} />
             <Tooltip content={<CustomTooltip />} />
             <Legend verticalAlign="top" align="right" height={36} />
             
-            {options.mmg && <Bar dataKey="mmg" name="MMG" fill="#1e2f74" radius={[4, 4, 0, 0]} maxBarSize={30} />}
+            {options.mmg && <Bar dataKey="mmg" name="MMG" fill="#0f2744" radius={[4, 4, 0, 0]} maxBarSize={30} />}
             {options.occ && (
-              <Bar dataKey="occ" name="OCC" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={30} />
+              <Bar dataKey="occ" name="OCC" fill="#3b6fa0" radius={[4, 4, 0, 0]} maxBarSize={30} />
             )}
 
             
-            {options.ecart && <Line type="monotone" dataKey="ecart_pct" name="Écart %" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />}
+            {options.ecart && <Line type="monotone" dataKey="ecart_pct" name="Écart %" stroke="#5ba3d9" strokeWidth={2} dot={{ r: 4 }} />}
             {options.moyenne && stats && (
               <ReferenceLine 
                 y={stats.meanOcc} 
@@ -291,14 +290,25 @@ const RevenusChart = ({ startDate, endDate }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [service, setService] = useState('all');
+  const [fournisseur, setFournisseur] = useState('all');
   const [granularite, setGranularity] = useState('week');
   
   const { services: mappedServices } = useServiceMapping();
 
+  const fournisseurs = useMemo(() => {
+    return [...new Set(mappedServices.map(s => s.nom_fournisseur).filter(Boolean))].sort();
+  }, [mappedServices]);
+
+  const filteredServices = useMemo(() => {
+    return fournisseur === 'all' ? mappedServices : mappedServices.filter(s => s.nom_fournisseur === fournisseur);
+  }, [mappedServices, fournisseur]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const url = `/dashboard/revenus-par-service?start_date=${startDate}&end_date=${endDate}&granularite=${granularite}${service !== 'all' ? `&keyword=${service}` : ''}`;
+      let url = `/dashboard/revenus-par-service?start_date=${startDate}&end_date=${endDate}&granularite=${granularite}`;
+      if (service !== 'all') url += `&nom_service=${encodeURIComponent(service)}`;
+      if (fournisseur !== 'all') url += `&fournisseur=${encodeURIComponent(fournisseur)}`;
       const res = await api.get(url);
       setData(res.data);
     } catch (err) {
@@ -317,7 +327,7 @@ const RevenusChart = ({ startDate, endDate }) => {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate, service, granularite]);
+  }, [startDate, endDate, service, fournisseur, granularite]);
 
   const stats = useMemo(() => {
     if (data.length === 0) return null;
@@ -330,19 +340,28 @@ const RevenusChart = ({ startDate, endDate }) => {
   }, [data]);
 
   // Dynamic colors for services
-  const colors = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'];
+  const colors = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9', '#7ab8e0'];
 
   return (
     <div className="surface surface-pad" style={{ marginBottom: '1.2rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Revenus par service" subtitle={`Analyse des revenus (DT) · ${startDate} au ${endDate}`}>
         <select 
           className="select-sm" 
+          value={fournisseur} 
+          onChange={e => { setFournisseur(e.target.value); setService('all'); }}
+          style={{ height: '32px', borderRadius: '6px', border: '1px solid var(--border)', padding: '0 8px', fontSize: '13px', background: 'var(--bg-surface)', color: 'var(--text-main)', marginRight: '8px' }}
+        >
+          <option value="all">Tous les fournisseurs</option>
+          {fournisseurs.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select 
+          className="select-sm" 
           value={service} 
           onChange={e => setService(e.target.value)}
-          style={{ height: '32px', borderRadius: '6px', border: '1px solid var(--border)', padding: '0 8px', fontSize: '13px', background: 'var(--bg-surface)', color: 'var(--text-main)' }}
+          style={{ height: '32px', borderRadius: '6px', border: '1px solid var(--border)', padding: '0 8px', fontSize: '13px', background: 'var(--bg-surface)', color: 'var(--text-main)', marginRight: '8px' }}
         >
           <option value="all">Tous les services</option>
-          {mappedServices.map(s => <option key={s.keyword} value={s.keyword}>{s.nom_service}</option>)}
+          {[...new Map(filteredServices.map(s => [s.nom_service, s])).values()].map(s => <option key={s.nom_service} value={s.nom_service}>{s.nom_service}</option>)}
         </select>
         <select 
           className="select-sm" 
@@ -375,7 +394,7 @@ const RevenusChart = ({ startDate, endDate }) => {
               ))}
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} minTickGap={30} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatDT} />
             <Tooltip 
                content={({ active, payload, label }) => {
@@ -383,7 +402,7 @@ const RevenusChart = ({ startDate, endDate }) => {
                   const d = payload[0].payload;
                   return (
                     <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b' }}>
-                      <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {label}</div>
+                      <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {d.full_label || label}</div>
                       {d.is_outlier && <div style={{ color: '#fbbf24', fontSize: '11px', marginBottom: '4px' }}>⚠ Valeur exceptionnelle (z-score = {d.z_score})</div>}
                       {payload.map((p, i) => (
                         <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
@@ -417,15 +436,15 @@ const RevenusChart = ({ startDate, endDate }) => {
                 type="monotone" 
                 dataKey="valeur_capped" 
                 name="Revenus"
-                stroke="#6366f1" 
+                stroke="#3b6fa0" 
                 fill="url(#color-0)" 
                 strokeWidth={3}
                 dot={(props) => {
                   const { cx, cy, payload } = props;
                   if (payload.is_outlier) {
-                    return <circle cx={cx} cy={cy} r={6} fill="#f59e0b" stroke="#fff" strokeWidth={2} />;
+                    return <circle cx={cx} cy={cy} r={6} fill="#5ba3d9" stroke="#fff" strokeWidth={2} />;
                   }
-                  return <circle cx={cx} cy={cy} r={4} fill="#6366f1" />;
+                  return <circle cx={cx} cy={cy} r={4} fill="#3b6fa0" />;
                 }}
                 activeDot={{ r: 6 }}
               />
@@ -490,12 +509,7 @@ const TopServices = ({ startDate, endDate }) => {
                     </div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                   <div style={{ fontSize: '14px', fontWeight: 700, color: s.is_up ? '#10b981' : '#ef4444' }}>
-                      {s.is_up ? '↑' : '↓'} {Math.abs(s.variation)}%
-                   </div>
-                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>vs période préc.</div>
-                </div>
+                {/* Suppression de la comparaison vs période précédente */}
               </div>
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -550,7 +564,7 @@ const MmgSuccessCard = ({ startDate, endDate }) => {
 
 const SubscriberDistribution = ({ startDate, endDate }) => {
   const [data, setData] = useState([]);
-  const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981'];
+  const COLORS = ['#1e3a5f', '#3b6fa0', '#5ba3d9', '#7ab8e0'];
 
   useEffect(() => {
     api.get(`/dashboard/repartition-abonnes?start_date=${startDate}&end_date=${endDate}`)
@@ -596,38 +610,6 @@ const SubscriberDistribution = ({ startDate, endDate }) => {
   );
 };
 
-const EtlHealthSection = () => {
-  const [health, setHealth] = useState(null);
-
-  useEffect(() => {
-    api.get('/dashboard/etl-health').then(res => setHealth(res.data));
-  }, []);
-
-  if (!health) return null;
-
-  return (
-    <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-      <CardHeader title="Santé de l'ETL" subtitle="Performance des flux aujourd'hui" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginTop: '10px' }}>
-        <div style={{ textAlign: 'center' }}>
-           <div style={{ fontSize: '1.2rem', fontWeight: 800, color: (health.taux_succes_today > 95) ? 'var(--success)' : 'var(--warning)' }}>{health.taux_succes_today}%</div>
-           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Succès</div>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-           <div style={{ fontSize: '1.2rem', fontWeight: 800, color: (health.jobs_erreur_today > 0) ? 'var(--danger)' : 'var(--success)' }}>{health.jobs_erreur_today}</div>
-           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Erreurs</div>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-           <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>{health.total_today}</div>
-           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Jobs total</div>
-        </div>
-      </div>
-      <div style={{ marginTop: '15px', fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
-         Dernier import réussi : <span style={{ fontWeight: 600 }}>{health.dernier_import ? format(parseISO(health.dernier_import), 'HH:mm') : 'N/A'}</span>
-      </div>
-    </div>
-  );
-};
 
 const HourlyActivityChart = ({ startDate, endDate }) => {
   const [data, setData] = useState([]);
@@ -661,7 +643,7 @@ const HourlyActivityChart = ({ startDate, endDate }) => {
               contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
               itemStyle={{ fontSize: '13px' }}
             />
-            <Bar dataKey="nb" fill="#6366f1" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="nb" fill="#2a5082" radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -727,118 +709,11 @@ const BillingIntegrity = ({ startDate, endDate }) => {
   );
 };
 
-const RoamingDistribution = ({ startDate, endDate }) => {
-  const [data, setData] = useState([]);
-  const COLORS = ['#10b981', '#6366f1'];
-
-  useEffect(() => {
-    api.get(`/dashboard/repartition-roaming?start_date=${startDate}&end_date=${endDate}`)
-      .then(res => setData(res.data))
-      .catch(console.error);
-  }, [startDate, endDate]);
-
-  return (
-    <div className="surface surface-pad" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-      <CardHeader title="Local vs Roaming" subtitle="Volume CDR par type de connexion" />
-      <div style={{ height: '220px', minHeight: '220px' }}>
-          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
-          <PieChart>
-            <Pie
-              data={data}
-              innerRadius={0}
-              outerRadius={80}
-              dataKey="nb"
-              nameKey="type"
-            >
-              {data.map((entry, index) => (
-                <PieCell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip 
-              contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
-              itemStyle={{ fontSize: '13px' }}
-            />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-};
-
 // --- Main Page ---
-
-const ComparisonChart = ({ startDate, endDate }) => {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Calculer la période précédente
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const diff = differenceInDays(end, start) + 1;
-        
-        const prevEnd = format(subDays(start, 1), 'yyyy-MM-dd');
-        const prevStart = format(subDays(start, diff), 'yyyy-MM-dd');
-
-        const [resCurr, resPrev] = await Promise.all([
-          api.get(`/dashboard/revenus?date=${endDate}&days=${diff}`),
-          api.get(`/dashboard/revenus?date=${prevEnd}&days=${diff}`)
-        ]);
-
-        // Aligner les données par "index" de jour (J-0, J-1...)
-        const combined = [];
-        const currData = resCurr.data.reverse();
-        const prevData = resPrev.data.reverse();
-        
-        const maxLen = Math.max(currData.length, prevData.length);
-        for(let i=0; i < maxLen; i++) {
-          combined.push({
-            index: i,
-            label: currData[i]?.start_date ? format(parseISO(currData[i].start_date), 'dd/MM') : `J-${maxLen-i}`,
-            actuelle: currData[i]?.total || 0,
-            precedente: prevData[i]?.total || 0
-          });
-        }
-        setData(combined);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [startDate, endDate]);
-
-  return (
-    <div className="surface surface-pad" style={{ marginBottom: '24px', border: '1px solid var(--primary)', background: 'var(--bg-surface)' }}>
-       <CardHeader title="⇄ Comparaison de tendances" subtitle="Superposition de la période actuelle (Bleu) vs précédente (Gris)" />
-       <div style={{ height: '300px', width: '100%' }}>
-            <ResponsiveContainer width="100%" height={300} minWidth={0} debounce={50}>
-            <AreaChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatDT} />
-              <Tooltip 
-                contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
-              />
-              <Legend />
-              <Area type="monotone" dataKey="actuelle" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.1} strokeWidth={3} />
-              <Area type="monotone" dataKey="precedente" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.05} strokeWidth={2} strokeDasharray="5 5" />
-            </AreaChart>
-          </ResponsiveContainer>
-       </div>
-    </div>
-  );
-};
 
 export default function Dashboard({ user }) {
   const { periode, setPreset, setCustom, setPeriode } = usePeriode();
-  const [compare, setCompare] = useState(false);
-
+  
 
 
   useEffect(() => {
@@ -868,13 +743,6 @@ export default function Dashboard({ user }) {
           <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Tableau de bord SMS+ VAS</h1>
           <p style={{ margin: '4px 0 0', color: '#64748b' }}>Analyse complète de l'assurance revenus et détection de fraude</p>
         </div>
-        <button 
-          className={`btn ${compare ? 'btn-primary' : 'btn-soft'}`} 
-          onClick={() => setCompare(!compare)}
-          style={{ height: '40px', fontWeight: 600 }}
-        >
-          {compare ? '✓ Comparaison Active' : '⇄ Comparer deux périodes'}
-        </button>
       </div>
 
       <GlobalPeriodControls 
@@ -884,8 +752,7 @@ export default function Dashboard({ user }) {
       />
 
 
-      {compare && <ComparisonChart startDate={periode.startDate} endDate={periode.endDate} />}
-
+      
       <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
         
         <TrafficChart 
@@ -905,28 +772,19 @@ export default function Dashboard({ user }) {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
            <BillingIntegrity startDate={periode.startDate} endDate={periode.endDate} />
-           <EtlHealthSection />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
            <MmgSuccessCard startDate={periode.startDate} endDate={periode.endDate} />
            <SubscriberDistribution startDate={periode.startDate} endDate={periode.endDate} />
-           <RoamingDistribution startDate={periode.startDate} endDate={periode.endDate} />
            <HourlyActivityChart startDate={periode.startDate} endDate={periode.endDate} />
         </div>
 
       </div>
 
-      <div style={{ marginTop: '32px' }}>
-        <JobStatusBar
-          jobTypes={['import_occ_csv', 'import_mmg_csv', 'etl_cdr_from_tmp', 'etl_agg_from_raw', 'dashboard_stats_load', 'dashboard_revenus_chart', 'notifications_load', 'notifications_polling']}
-          title="Traitements système aujourd'hui"
-          compact={false}
-          refreshInterval={15000}
-        />
-      </div>
+
 
       <style>{`
         .dashboard-grid { margin-top: 24px; }
@@ -941,7 +799,7 @@ export default function Dashboard({ user }) {
           cursor: pointer;
         }
         .select-sm:hover { border-color: #cbd5e1; }
-        .select-sm:focus { border-color: #6366f1; }
+        .select-sm:focus { border-color: #2a5082; }
         
         .dropdown { position: relative; display: inline-block; }
         .dropdown-content {

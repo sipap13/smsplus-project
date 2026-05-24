@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 /**
  * Modal simple (overlay + carte), sans librairie externe.
  * Le parent contrôle l’affichage : ne monter le composant que lorsque la modale est ouverte.

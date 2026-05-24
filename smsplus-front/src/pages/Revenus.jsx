@@ -7,7 +7,7 @@ import {
 import { formatCompactNumber, formatDT } from '../lib/format';
 import useServiceMapping from '../hooks/useServiceMapping';
 
-const COLORS = ['#1a237e', '#0288d1', '#00838f', '#2e7d32', '#e65100', '#6a1b9a'];
+const COLORS = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9'];
 
 export default function Revenus() {
   const [data, setData]       = useState([]);
@@ -214,7 +214,7 @@ export default function Revenus() {
               onClick={() => setView(v)}
               className="btn btn-pill"
               style={{
-                background: view === v ? '#0d9488' : 'var(--chip-bg)',
+                background: view === v ? '#1e3a5f' : 'var(--chip-bg)',
                 color: view === v ? '#fff' : 'var(--text-heading)',
                 fontWeight: 600,
               }}
@@ -231,11 +231,11 @@ export default function Revenus() {
           {
             label: 'Total Revenus SMS+',
             value: formatDT(totalRevenus),
-            color: '#1a237e',
+            color: '#1e3a5f',
             icon: 'RV',
           },
-          { label: 'Total transactions', value: totalCdr.toLocaleString('fr-FR'), color: '#0288d1', icon: 'TR' },
-          { label: 'Services actifs', value: pieDataForChart.length, color: '#00838f', icon: 'SV' },
+          { label: 'Total transactions', value: totalCdr.toLocaleString('fr-FR'), color: '#2a5082', icon: 'TR' },
+          { label: 'Services actifs', value: pieDataForChart.length, color: '#3b6fa0', icon: 'SV' },
         ].map(k => (
           <div key={k.label} className="kpi-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: k.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
@@ -336,7 +336,7 @@ export default function Revenus() {
                 <tr key={i}>
                   <td data-label="Date" style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{displayDate(dateLabel)}</td>
                   <td data-label="Nb Transactions" style={{ padding: '0.75rem 1rem', color: 'var(--text-main)' }}>{parseInt(row.nb_cdr, 10).toLocaleString('fr-FR')}</td>
-                  <td data-label="Revenus (DT)" style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#2e7d32' }}>{formatDT(row.total)}</td>
+                  <td data-label="Revenus (DT)" style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e3a5f' }}>{formatDT(row.total)}</td>
                 </tr>
               );
             })}
@@ -345,7 +345,7 @@ export default function Revenus() {
             <tr style={{ fontWeight: 700 }}>
               <td className="text-heading" style={{ padding: '0.875rem 1rem' }}>TOTAL</td>
               <td className="text-heading" style={{ padding: '0.875rem 1rem' }}>{totalCdr.toLocaleString('fr-FR')}</td>
-              <td style={{ padding: '0.875rem 1rem', color: '#2e7d32' }}>{formatDT(totalRevenus)}</td>
+              <td style={{ padding: '0.875rem 1rem', color: '#1e3a5f' }}>{formatDT(totalRevenus)}</td>
             </tr>
           </tfoot>
         </table>

@@ -14,143 +14,256 @@ class AiProviderService
     public function getLastProvider(): string { return $this->lastProvider; }
     public function getProviderStats(): array { return $this->providerStats; }
 
-    public function complete(string $systemPrompt, string $userMessage, int $maxTokens = 1000, float $temperature = 0.3, ?array $data = null): array
+    public function complete(string $systemPrompt, string $userMessage, int $maxTokens = 1000, float $temperature = 0.3, ?array $data = null, ?string $customModel = null): array
     {
+        // Truncate user message if too large (Groq limit is ~6000 tokens)
+        // 1 token approx 3 chars for JSON/dense text.
+        $charLimit = 4000 * 3; 
+        if (strlen($userMessage) > $charLimit) {
+            Log::warning('[AI] User message too large (' . strlen($userMessage) . ' chars), truncating.');
+            $userMessage = substr($userMessage, 0, $charLimit) . "... [TRUNCATED DUE TO SIZE]";
+        }
+
+        // Déterminer le type de requête UNE SEULE FOIS et le réutiliser partout
+        // prediction → JSON obligatoire | chatbot SQL/texte → texte libre accepté
+        $isPrediction = stripos($systemPrompt, 'JSON') !== false
+            && stripos($systemPrompt, 'sql') === false;
+
         // 1. Groq
         try {
-            $result = $this->callGroq($systemPrompt, $userMessage, $maxTokens, $temperature);
+            $result = $this->callGroq($systemPrompt, $userMessage, $maxTokens, $temperature, $customModel);
+            $result = $this->cleanAiResponse($result);
+
+            // Pour chatbot SQL : extraire le SELECT si Groq ajoute du texte avant
+            if (!$isPrediction) {
+                $result = $this->extractSqlOrText($result);
+            }
+            
+            if ($isPrediction && !$this->isValidAiResponse($result)) {
+                throw new \Exception('Groq a retourné un JSON invalide ou tronqué (trop de tokens).');
+            }
+            if (empty(trim($result))) {
+                throw new \Exception('Groq a retourné une réponse vide.');
+            }
+
             $this->lastProvider = 'groq';
             $this->logProviderCall('groq', true);
-            return ['content' => $result, 'provider' => 'groq', 'fallback' => false, 'model' => config('services.groq.model')];
+            return ['content' => $result, 'provider' => 'groq', 'fallback' => false, 'model' => $customModel ?: config('services.groq.model')];
         } catch (\Exception $e) {
-            Log::error('[AI] Groq error: ' . $e->getMessage(), [
-                'exception' => get_class($e),
-                'trace' => substr($e->getTraceAsString(), 0, 500)
-            ]);
+            Log::error('[AI] Groq error: ' . $e->getMessage());
             $this->logProviderCall('groq', false);
             $this->logFallbackEvent('groq', $e->getMessage());
         }
 
-        // 2. Gemini Flash
-        if (config('services.gemini.enabled')) {
+        // 2. Mistral AI (Fallback)
+        if (config('services.mistral.enabled')) {
             try {
-                $result = $this->callGemini($systemPrompt, $userMessage, $maxTokens);
-                $this->lastProvider = 'gemini';
-                $this->logProviderCall('gemini', true);
-                return ['content' => $result, 'provider' => 'gemini', 'fallback' => false, 'model' => config('services.gemini.model')];
-            } catch (\Exception $e) {
-                Log::error('[AI] Gemini error: ' . $e->getMessage(), [
-                    'exception' => get_class($e),
-                    'trace' => substr($e->getTraceAsString(), 0, 500)
-                ]);
-                $this->logProviderCall('gemini', false);
-                $this->logFallbackEvent('gemini', $e->getMessage());
-                
-                // Try Groq as fallback instead of PHP
-                try {
-                    $result = $this->callGroq($systemPrompt, $userMessage, $maxTokens, $temperature);
-                    $this->lastProvider = 'groq';
-                    $this->logProviderCall('groq', true);
-                    return ['content' => $result, 'provider' => 'groq', 'fallback' => true, 'model' => config('services.groq.model')];
-                } catch (\Exception $groqException) {
-                    Log::error('[AI] Groq fallback also failed: ' . $groqException->getMessage());
-                    $this->logProviderCall('groq', false);
-                    $this->logFallbackEvent('groq', $groqException->getMessage());
+                // Mistral supporte des fenêtres de contexte larges
+                $mistralMaxTokens = max($maxTokens, 4000); 
+                $mistralResult = $this->callMistral($systemPrompt, $userMessage, $mistralMaxTokens, $temperature);
+                $mistralContent = $this->cleanAiResponse($mistralResult['content']);
+
+                // Pour chatbot SQL : extraire le SELECT si Mistral ajoute du texte avant
+                if (!$isPrediction) {
+                    $mistralContent = $this->extractSqlOrText($mistralContent);
                 }
+
+                if ($isPrediction && !$this->isValidAiResponse($mistralContent)) {
+                    Log::warning('[AI] Mistral raw response (prediction): ' . substr($mistralContent, 0, 400));
+                    throw new \Exception('Mistral a retourné un JSON invalide ou tronqué.');
+                }
+
+                if (empty(trim($mistralContent))) {
+                    throw new \Exception('Mistral a retourné une réponse vide.');
+                }
+
+                $this->lastProvider = 'mistral';
+                $this->logProviderCall('mistral', true);
+                return [
+                    'content' => $mistralContent, 
+                    'provider' => 'mistral', 
+                    'fallback' => true,
+                    'model' => $mistralResult['model']
+                ];
+            } catch (\Exception $e) {
+                Log::error('[AI] Mistral error: ' . $e->getMessage());
+                $this->logProviderCall('mistral', false);
+                $this->logFallbackEvent('mistral', $e->getMessage());
             }
         }
 
-        // 3. PHP fallback - generate statistical predictions instead of null
+        // 3. PHP fallback
         $this->lastProvider = 'php_fallback';
         $this->logProviderCall('php_fallback', true);
-        $this->logFallbackEvent('php_fallback', 'All AI providers unavailable');
         
-        // Generate fallback statistical content
         $fallbackContent = $this->generateStatisticalFallback($systemPrompt, $userMessage, $data);
-        
         return ['content' => $fallbackContent, 'provider' => 'php_fallback', 'fallback' => true, 'model' => 'statistical_model_v2', 'data' => $data];
     }
 
-    private function callGroq(string $system, string $user, int $maxTokens, float $temperature): string
+    /**
+     * Strip markdown code fences and return clean JSON string.
+     * Gemini often wraps responses in ```json ... ```
+     */
+    private function cleanAiResponse(string $content): string
     {
-        try {
-            Log::debug('[AI] Groq call with key: ' . substr(config('services.groq.api_key'), 0, 8) . '...');
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . config('services.groq.api_key'),
-                'Content-Type'  => 'application/json',
-            ])
-            ->timeout(45)
-            ->retry(1, 2000)
-            ->post(config('services.groq.url'), [
-                'model'       => config('services.groq.model'),
-                'messages'    => [['role' => 'system', 'content' => $system], ['role' => 'user', 'content' => $user]],
-                'temperature' => $temperature,
-                'max_tokens'  => $maxTokens,
-            ]);
-        } catch (\Exception $e) {
-            throw new \RuntimeException('Groq timeout après retry: ' . $e->getMessage());
+        // Remove markdown code fences: ```json ... ``` or ``` ... ```
+        $cleaned = preg_replace('/^```(?:json)?\s*/i', '', trim($content));
+        $cleaned = preg_replace('/\s*```$/i', '', $cleaned);
+        
+        // If still not valid, try to extract the first {...} block
+        if (!json_decode(trim($cleaned), true)) {
+            preg_match('/\{.*\}/s', $content, $matches);
+            if ($matches) {
+                return $matches[0];
+            }
         }
-
-        if (!$response->successful()) throw new \RuntimeException('Groq HTTP ' . $response->status() . ': ' . $response->body());
-        $content = trim($response->json('choices.0.message.content', ''));
-        if (empty($content)) throw new \RuntimeException('Groq réponse vide');
-        return $content;
+        
+        return trim($cleaned);
     }
 
-    private function callGemini(string $system, string $user, int $maxTokens): string
+    private function isValidAiResponse(string $content): bool
     {
-        $model = config('services.gemini.model', 'gemini-1.5-flash');
-        $baseUrl = config('services.gemini.url');
+        if (!$content) return false;
         
-        // Clean up model name if it contains "models/" prefix
-        $modelName = str_replace('models/', '', $model);
-        
-        $url = $baseUrl . $modelName . ':generateContent?key=' . config('services.gemini.api_key');
+        $cleaned = $this->cleanAiResponse($content);
+        return json_decode($cleaned, true) !== null;
+    }
 
-        $response = Http::withHeaders(['Content-Type' => 'application/json'])
-            ->timeout((int) config('services.gemini.timeout', 30))
-            ->post($url, [
-                'contents' => [['role' => 'user', 'parts' => [['text' => $system . "\n\n" . $user]]]],
-                'generationConfig' => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.1, 'topP' => 0.8, 'topK' => 40],
-                'safetySettings'   => [
-                    ['category' => 'HARM_CATEGORY_HARASSMENT',        'threshold' => 'BLOCK_NONE'],
-                    ['category' => 'HARM_CATEGORY_DANGEROUS_CONTENT', 'threshold' => 'BLOCK_NONE'],
-                ],
-            ]);
+    private function callGroq(string $system, string $user, int $maxTokens, float $temperature, ?string $customModel = null): string
+    {
+        // On augmente le délai de retry pour Groq en cas de 429
+        $apiKey = config('services.groq.api_key');
+        $apiUrl = config('services.groq.url');
+        $model = $customModel ?: config('services.groq.model');
+        $timeout = 45;
 
-        // If v1beta fails, try v1
-        if (!$response->successful() && str_contains($baseUrl, 'v1beta')) {
-            $v1Url = str_replace('v1beta', 'v1', $baseUrl) . $modelName . ':generateContent?key=' . config('services.gemini.api_key');
-            $response = Http::withHeaders(['Content-Type' => 'application/json'])
-                ->timeout((int) config('services.gemini.timeout', 30))
-                ->post($v1Url, [
-                    'contents' => [['role' => 'user', 'parts' => [['text' => $system . "\n\n" . $user]]]],
-                    'generationConfig' => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.1, 'topP' => 0.8, 'topK' => 40],
-                ]);
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $apiKey,
+            'Content-Type'  => 'application/json',
+        ])
+        ->timeout($timeout)
+        ->retry(3, 2000, function ($exception, $request) {
+            return $exception instanceof \Illuminate\Http\Client\ConnectionException || 
+                   ($exception->getCode() === 429) || 
+                   ($exception->getCode() >= 500);
+        })
+        ->post($apiUrl, [
+            'model'       => $model,
+            'messages'    => [
+                ['role' => 'system', 'content' => $system],
+                ['role' => 'user', 'content' => $user],
+            ],
+            'max_tokens'  => $maxTokens,
+            'temperature' => $temperature,
+        ]);
+
+        if ($response->failed()) {
+            throw new \Exception("Groq HTTP {$response->status()}: " . $response->body());
         }
 
-        if (!$response->successful()) throw new \RuntimeException('Gemini HTTP ' . $response->status() . ': ' . $response->body());
-        $content = trim($response->json('candidates.0.content.parts.0.text', ''));
-        
-        // Nettoie les balises markdown si présentes
-        $content = preg_replace('/^```json\s*/m', '', $content);
-        $content = preg_replace('/^```\s*/m', '', $content);
-        $content = trim($content);
-
-        if (empty($content)) throw new \RuntimeException('Gemini réponse vide');
-        return $content;
+        return $response->json('choices.0.message.content');
     }
+
+    protected function callMistral(string $systemPrompt, string $userMessage, int $maxTokens, float $temperature): array
+    {
+        $apiKey = config('services.mistral.api_key');
+        if (!$apiKey) {
+            throw new \Exception('La clé MISTRAL_API_KEY est manquante.');
+        }
+
+        $model = config('services.mistral.model', 'mistral-small-latest');
+        $url   = config('services.mistral.url', 'https://api.mistral.ai/v1/chat/completions');
+
+        // Pour les prédictions financières, on force une temperature basse (plus précis)
+        $effectiveTemperature = min($temperature, 0.2);
+
+        // response_format json_object uniquement pour les requêtes de prédiction (JSON explicitement demandé)
+        // Pour le chatbot SQL, on laisse Mistral répondre en texte libre (SQL pur)
+        $isPredictionRequest = stripos($systemPrompt, 'JSON') !== false 
+            && stripos($systemPrompt, 'sql') === false;
+
+        $payload = [
+            'model'       => $model,
+            'messages'    => [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user',   'content' => $userMessage],
+            ],
+            'max_tokens'  => $maxTokens,
+            'temperature' => $isPredictionRequest ? $effectiveTemperature : $temperature,
+        ];
+
+        // Activer le mode JSON natif seulement pour les prédictions
+        if ($isPredictionRequest) {
+            $payload['response_format'] = ['type' => 'json_object'];
+        }
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $apiKey,
+            'Content-Type'  => 'application/json',
+        ])
+        ->timeout(60)
+        ->retry(2, 1500, function ($exception) {
+            return $exception instanceof \Illuminate\Http\Client\ConnectionException;
+        })
+        ->post($url, $payload);
+
+        if ($response->failed()) {
+            throw new \Exception("Mistral HTTP {$response->status()}: " . $response->body());
+        }
+
+        $content = $response->json('choices.0.message.content');
+        if (!$content) {
+            throw new \Exception('Mistral a retourné une réponse vide.');
+        }
+
+        Log::info('[AI] Mistral success with model: ' . $model . ' | mode: ' . ($isPredictionRequest ? 'json' : 'text'));
+        return ['content' => $content, 'model' => $model];
+    }
+
 
     private function generateStatisticalFallback(string $systemPrompt, string $userMessage, ?array $data): string
     {
-        // 1. If it's a SQL generation request
+        $q = strtolower($userMessage);
+
+        // 1. Requête SQL de secours (chatbot) — context-aware
         if (str_contains(strtolower($systemPrompt), 'sql') || str_contains(strtolower($systemPrompt), 'select')) {
-            // Return a safe SQL query that returns a generic count or empty set
-            // to avoid crashing the ChatbotService
-            if (str_contains(strtolower($userMessage), 'mmg')) {
-                return "SELECT 'MMG' as source, COUNT(*) as nb FROM ra_t_mmg_cdr_det WHERE start_date >= CURRENT_DATE - INTERVAL '7 days'";
+
+            // Comparaison OCC vs MMG
+            if ((str_contains($q, 'compar') || str_contains($q, 'vs') || str_contains($q, 'versus'))
+                && (str_contains($q, 'occ') || str_contains($q, 'mmg'))) {
+                return "SELECT 'OCC' as source, COUNT(*) as nb_transactions, COUNT(DISTINCT a_msisdn) as nb_abonnes FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' AND call_type = 'VAS'"
+                    . " UNION ALL "
+                    . "SELECT 'MMG' as source, COUNT(*) as nb_transactions, COUNT(DISTINCT a_msisdn) as nb_abonnes FROM ra_t_mmg_cdr_det WHERE start_date >= CURRENT_DATE - INTERVAL '7 days'";
             }
-            return "SELECT 'OCC' as source, COUNT(*) as nb FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days'";
+
+            // Numéro le plus actif / top MSISDN
+            if (str_contains($q, 'plus actif') || str_contains($q, 'numéro actif') || str_contains($q, 'numero actif')
+                || (str_contains($q, 'actif') && (str_contains($q, 'numéro') || str_contains($q, 'numero') || str_contains($q, 'msisdn')))) {
+                return "SELECT a_msisdn, COUNT(*) as nb_transactions, SUM(charge_amount) as total_revenus FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' AND call_type = 'VAS' GROUP BY a_msisdn ORDER BY nb_transactions DESC LIMIT 10";
+            }
+
+            // Nombre d'abonnés actifs (total)
+            if (str_contains($q, 'combien') && (str_contains($q, 'abonné') || str_contains($q, 'actif'))) {
+                return "SELECT COUNT(DISTINCT a_msisdn) as nb_abonnes_actifs, COUNT(*) as nb_transactions, SUM(charge_amount) as total_revenus FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' AND call_type = 'VAS'";
+            }
+
+            // Abonnés actifs générique
+            if (str_contains($q, 'abonné') || str_contains($q, 'actif') || str_contains($q, 'msisdn')) {
+                return "SELECT a_msisdn, COUNT(*) as nb_transactions, SUM(charge_amount) as total_revenus FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' AND call_type = 'VAS' GROUP BY a_msisdn ORDER BY nb_transactions DESC LIMIT 10";
+            }
+
+            // Revenus / chiffre d'affaires
+            if (str_contains($q, 'revenu') || str_contains($q, 'montant') || str_contains($q, 'chiffre')) {
+                return "SELECT start_date::date as jour, SUM(charge_amount) as total_revenus, COUNT(*) as nb_transactions FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' AND call_type = 'VAS' GROUP BY start_date::date ORDER BY jour DESC";
+            }
+
+            // MMG only
+            if (str_contains($q, 'mmg')) {
+                return "SELECT start_date::date as jour, COUNT(*) as nb_appels, COUNT(DISTINCT a_msisdn) as nb_abonnes FROM ra_t_mmg_cdr_det WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' GROUP BY start_date::date ORDER BY jour DESC";
+            }
+
+            // OCC par défaut
+            return "SELECT start_date::date as jour, COUNT(*) as nb_transactions, SUM(charge_amount) as total_revenus, COUNT(DISTINCT a_msisdn) as nb_abonnes FROM ra_t_occ_cdr_detail WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' AND call_type = 'VAS' GROUP BY start_date::date ORDER BY jour DESC";
         }
 
         // 2. If it's a prediction request with data
@@ -259,5 +372,30 @@ class AiProviderService
         } catch (\Throwable $e) {
             Log::debug('[AI] Impossible de logger dans ra_t_etl_jobs : ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Extrait le SQL pur si l'IA a ajouté du texte introductif avant SELECT/WITH.
+     * Si le contenu ne ressemble pas à du SQL, retourne le texte tel quel (pour les réponses chatbot).
+     */
+    private function extractSqlOrText(string $content): string
+    {
+        $content = trim($content);
+
+        // Si ça commence déjà par SELECT ou WITH → parfait, rien à faire
+        if (preg_match('/^\s*(select|with)\b/i', $content)) {
+            return $content;
+        }
+
+        // Chercher la première occurrence de SELECT ou WITH en début de ligne
+        if (preg_match('/^(SELECT|WITH)\b.*/im', $content, $m, PREG_OFFSET_CAPTURE)) {
+            $offset = $m[0][1];
+            $extracted = trim(substr($content, $offset));
+            Log::info('[AI] extractSqlOrText: stripped preamble (' . $offset . ' chars)');
+            return $extracted;
+        }
+
+        // Pas de SQL trouvé → c'est une réponse texte (generateResponse), on la retourne entière
+        return $content;
     }
 }

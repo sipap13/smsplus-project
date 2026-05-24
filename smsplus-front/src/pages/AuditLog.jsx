@@ -18,6 +18,7 @@ export default function AuditLog() {
   const [stats, setStats] = useState(null);
   const [graphStats, setGraphStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -84,9 +85,9 @@ export default function AuditLog() {
 
   const getRoleBadge = (role) => {
     const map = {
-      'ADMIN': { color: '#dc2626', bg: '#fee2e2', label: 'ADMIN' },
-      'ANALYSTE_OP': { color: '#d97706', bg: '#fef3c7', label: 'OP' },
-      'ANALYSTE_BUSS': { color: '#16a34a', bg: '#dcfce7', label: 'BUSS' },
+      'ADMIN': { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)', label: 'ADMIN' },
+      'ANALYSTE_OP': { color: '#3b6fa0', bg: 'rgba(59, 111, 160, 0.15)', label: 'OP' },
+      'ANALYSTE_BUSS': { color: '#2a5082', bg: 'rgba(42, 80, 130, 0.15)', label: 'BUSS' },
     };
     const s = map[role] || { color: '#6b7280', bg: '#f3f4f6', label: role };
     return <span className="badge" style={{ color: s.color, background: s.bg, fontWeight: 700 }}>{s.label}</span>;
@@ -94,12 +95,12 @@ export default function AuditLog() {
 
   const getActionBadge = (action) => {
     const colors = {
-      login: '#3b82f6',
-      create: '#16a34a',
-      update: '#f59e0b',
+      login: '#1e3a5f',
+      create: '#2a5082',
+      update: '#3b6fa0',
       delete: '#ef4444',
-      export: '#8b5cf6',
-      import: '#06b6d4',
+      export: '#4a8ec2',
+      import: '#5ba3d9',
     };
     const color = colors[action] || '#64748b';
     return <span className="badge" style={{ background: color, color: '#fff', fontSize: '0.75rem' }}>{action.toUpperCase()}</span>;
@@ -113,7 +114,7 @@ export default function AuditLog() {
 
   const getAvatar = (email) => {
     const initial = email ? email.charAt(0).toUpperCase() : '?';
-    const colors = ['#3b82f6', '#16a34a', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+    const colors = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9'];
     const idx = (email || '').length % colors.length;
     return (
       <div style={{ width: 24, height: 24, borderRadius: '50%', background: colors[idx], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
@@ -162,9 +163,9 @@ export default function AuditLog() {
       {stats && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
-            { label: 'Total actions', value: formatCompactNumber(stats.total_actions), color: '#6366f1' },
-            { label: "Logins aujourd'hui", value: stats.logins_aujourd_hui, color: '#10b981' },
-            { label: 'Top utilisateur', value: stats.top_utilisateur, color: '#f59e0b', small: true },
+            { label: 'Total actions', value: formatCompactNumber(stats.total_actions), color: '#1e3a5f' },
+            { label: "Logins aujourd'hui", value: stats.logins_aujourd_hui, color: '#3b6fa0' },
+            { label: 'Top utilisateur', value: stats.top_utilisateur, color: '#5ba3d9', small: true },
             { label: 'Échecs', value: stats.actions_echec, color: stats.actions_echec > 5 ? '#ef4444' : '#10b981' },
           ].map(k => (
             <div key={k.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '14px', padding: '1rem 1.25rem' }}>

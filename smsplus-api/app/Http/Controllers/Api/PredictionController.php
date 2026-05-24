@@ -37,7 +37,8 @@ class PredictionController extends Controller
 
         // Clé cache basée sur l'heure (Y-m-d-H)
         $cacheKey = 'predictions_' . $horizon . '_' . ($keyword ?? 'all') . '_' . ($subscriberType ?? 'all') . '_' . date('Y-m-d-H');
-        $cacheDuration = 7200; // 2 heures
+        // Cache plus long = moins d'appels Mistral/Groq (coûteux en temps)
+        $cacheDuration = 21600; // 6 heures de base
 
         if ($bypassCache) {
             Cache::forget($cacheKey);
@@ -60,7 +61,7 @@ class PredictionController extends Controller
                 MIN(charge_amount) as revenu_min
             ")
             ->where('call_type', '=', 'VAS')
-            ->whereRaw("start_date >= NOW() - INTERVAL '60 days'")
+            ->whereRaw("start_date >= NOW() - INTERVAL '120 days'")
             ->when($keyword, function ($query) use ($keyword) {
                 $query->where('keyword', '=', $keyword);
             })
@@ -90,7 +91,9 @@ class PredictionController extends Controller
         $startMetrics = microtime(true);
 
         $historique = $this->aggregateByGranularity($historiqueRaw, $granularite);
-
+        
+        \Log::info("[Prediction] History count for {$keyword}: " . count($historique) . " days (raw: " . count($historiqueRaw) . ")");
+        
         if (count($historique) < 7) {
             return response()->json([
                 'insuffisant'         => true,
@@ -122,21 +125,39 @@ class PredictionController extends Controller
             $this->logJobProgress('prediction_groq_call', 'running');
             $startAi = microtime(true);
 
-            $systemPrompt = 'Tu es un expert senior en analyse financiere telecom chez Tunisie Telecom, specialise en services VAS SMS+. Tu reponds UNIQUEMENT en JSON valide strict, sans markdown, sans texte hors JSON.';
-            $userPrompt   = $this->buildPrompt($historique, $stats, $metriques, $horizon);
+            // 1. Calcul préalable de la baseline statistique pour ancrage de l'IA et fallback immédiat
+            $statBaseline = $this->statisticalPredictor->predict($historique, $horizon);
 
-            $aiResult = $this->aiProvider->complete($systemPrompt, $userPrompt, 3000, 0.3, $historique);
+            $systemPrompt = 'Tu es un expert senior en analyse financiere telecom chez Tunisie Telecom, specialise en services VAS SMS+. Tu reponds UNIQUEMENT en JSON valide strict, sans markdown, sans texte hors JSON. Tes predictions doivent etre precises, basees sur les vraies tendances observees, avec des scores de confiance eleves (confidence_pct >= 75) justifies par l analyse statistique et l ancrage fourni.';
+            $userPrompt   = $this->buildPrompt($historique, $stats, $metriques, $horizon, $statBaseline);
+
+            // 2. Sélection dynamique du modèle selon la complexité de l'horizon
+            // Llama 3.3 70B Versatile offre de meilleures performances logiques sur les longues prévisions (14-30j)
+            $modelToUse = match(true) {
+                $horizon >= 14 => 'llama-3.3-70b-versatile',
+                default        => null, // Utilise le modèle par défaut configuré (llama-3.1-8b-instant)
+            };
+
+            // Tokens adaptatifs : inutile d'allouer trop de tokens pour 7 jours
+            $adaptiveTokens = match(true) {
+                $horizon >= 30 => 3500,
+                $horizon >= 14 => 2500,
+                default        => 1800,
+            };
+
+            $aiResult = $this->aiProvider->complete($systemPrompt, $userPrompt, $adaptiveTokens, 0.3, $historique, $modelToUse);
             
             if ($aiResult['provider'] === 'php_fallback') {
-                $data = $this->statisticalPredictor->predict($historique, $horizon);
+                $data = $statBaseline;
                 $data['provider_original'] = 'php_fallback';
                 $data['ai_model'] = 'statistical_model_v2';
             } else {
                 $data = $this->parseAiResponse($aiResult['content']);
                 if (!$data) {
-                    $data = $this->statisticalPredictor->predict($historique, $horizon);
+                    $data = $statBaseline;
                     $data['provider_original'] = 'php_fallback';
                     $data['ai_model'] = 'statistical_model_v2';
+                    $aiResult['provider'] = 'php_fallback'; // On force le label pour l'UI
                 } else {
                     $data['provider_original'] = $aiResult['provider'];
                     $data['ai_model'] = $aiResult['model'];
@@ -144,14 +165,21 @@ class PredictionController extends Controller
             }
 
             $data['ai_provider'] = $aiResult['provider'];
-            $data['ai_fallback'] = $aiResult['fallback'];
+            $data['ai_fallback'] = $aiResult['fallback'] || ($aiResult['provider'] === 'php_fallback');
             
             $this->logJobProgress('prediction_groq_call', 'success', (int)((microtime(true) - $startAi) * 1000));
             $this->logJobProgress('prediction_cache_save', 'running');
 
             // Ajustement du score
-            $data = $this->adjustScoreByProvider($data, $aiResult['provider'], count($historique));
+            $data = $this->adjustScoreByProvider($data, $aiResult['provider'], count($historique), $horizon);
             
+            // Si une IA a répondu (Groq ou Mistral), étendre le cache à 8h
+            // pour éviter de re-solliciter l'IA trop fréquemment
+            $effectiveCacheDuration = in_array($aiResult['provider'], ['groq', 'mistral'])
+                ? 28800  // 8h si IA
+                : 10800; // 3h si calcul statistique
+            Cache::put($cacheKey . '_duration', $effectiveCacheDuration, $effectiveCacheDuration);
+
             // Sauvegarde du timestamp
             Cache::put($cacheKey . '_time', now(), $cacheDuration);
             
@@ -160,11 +188,29 @@ class PredictionController extends Controller
             return $data;
         });
 
+        // Correction des hallucinations de l'IA sur le résumé (pour la cohérence des couleurs UI)
+        $resume = $predictions['resume_semaine'] ?? [];
+        $predJour = $predictions['predictions_journalieres'] ?? [];
+        if (!empty($predJour)) {
+            $sorted = collect($predJour)->sortBy('revenus_predit');
+            $pire = $sorted->first();
+            $meilleur = $sorted->last();
+            $resume['meilleur_jour'] = [
+                'date' => $meilleur['date'],
+                'montant' => $meilleur['revenus_predit']
+            ];
+            $resume['pire_jour'] = [
+                'date' => $pire['date'],
+                'montant' => $pire['revenus_predit']
+            ];
+            $resume['total_predit'] = array_sum(array_column($predJour, 'revenus_predit'));
+        }
+
         return response()->json([
             'historique'              => $historique,
             'predictions'             => $predictions['predictions_journalieres'] ?? [],
             'predictions_par_service' => $predictions['predictions_par_service']  ?? [],
-            'resume_semaine'          => $predictions['resume_semaine']            ?? null,
+            'resume_semaine'          => $resume,
             'analyse_detaillee'       => $predictions['analyse_detaillee']         ?? null,
             'recommandations'         => $predictions['recommandations']           ?? [],
             'score_fiabilite'         => $predictions['score_fiabilite']           ?? 0,
@@ -577,96 +623,58 @@ class PredictionController extends Controller
         ];
     }
 
-    protected function buildPrompt(array $historique, array $stats, array $metriques, int $horizon): string
+    protected function buildPrompt(array $historique, array $stats, array $metriques, int $horizon, ?array $statBaseline = null): string
     {
+        // Limiter l'historique envoyé à l'IA pour éviter les prompts trop longs
+        $maxHistRows = $horizon >= 14 ? 20 : 30;
+        $histSlice = array_slice($historique, -$maxHistRows);
+
         $data = array_map(fn ($h) => [
-            'date' => $h['start_date'],
-            'revenus_dt' => round((float) ($h['total_revenus'] ?? 0), 3),
-            'nb_cdr' => (int) ($h['nb_cdr'] ?? 0),
-            'nb_abonnes' => (int) ($h['nb_abonnes'] ?? 0),
-            'revenu_moyen' => round((float) ($h['revenu_moyen'] ?? 0), 3),
-        ], $historique);
+            'd' => $h['start_date'],
+            'r' => round((float) ($h['total_revenus'] ?? 0), 2),
+        ], $histSlice);
 
         $jsonData = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $joursNoms = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
         $mj = $metriques['meilleur_jour_semaine'] ?? null;
-        $pj = $metriques['pire_jour_semaine'] ?? null;
         $tendanceDir = $metriques['tendance_lineaire'] > 0 ? 'hausse' : 'baisse';
-        $tendanceVal = abs($metriques['tendance_lineaire']);
+        $tendanceVal = round(abs($metriques['tendance_lineaire']), 3);
 
-        $prompt = "Tu es un expert en analyse financiere telecom.
-Voici les revenus journaliers SMS+ VAS reels des 60 derniers jours en DT :
-{$jsonData}
+        // Intégrer la baseline statistique comme référence d'ancrage stricte pour éviter les hallucinations
+        $baselineStr = "";
+        if ($statBaseline && !empty($statBaseline['predictions_journalieres'])) {
+            $baselineData = array_map(fn ($p) => [
+                'date' => $p['date'],
+                'revenu_base' => round($p['revenus_predit'], 2),
+                'tendance_base' => $p['tendance']
+            ], $statBaseline['predictions_journalieres']);
+            $baselineStr = "\nBaseline de prediction statistique de reference (DT) :\n" . json_encode($baselineData, JSON_UNESCAPED_UNICODE) . "\n";
+        }
 
-REGLES OBLIGATOIRES :
-- Analyse les vraies tendances (hausse/baisse/cycles)
-- Respecte la volatilite naturelle des donnees
-- Ne genere PAS une progression lineaire parfaite
-- Base-toi sur les patterns de la semaine precedente
-- Prends en compte les variations weekend vs semaine
-- La variation max entre 2 jours consecutifs ne doit pas depasser 25% sauf anomalie justifiee
-- Les predictions doivent ressembler aux donnees reelles
-
-Statistiques calculees :
-- Moyenne 7j : {$metriques['moyenne_7j']} DT
-- Moyenne 30j : {$metriques['moyenne_30j']} DT
-- Volatilite (ecart-type) : {$metriques['ecart_type']} DT
-- Tendance : {$tendanceDir} de {$tendanceVal} DT/jour
-- Meilleur jour semaine : ".($mj ? $joursNoms[$mj] : 'N/A').'
-- Revenus weekend vs semaine : '.$metriques['variation_weekend_vs_semaine_pct'].'%
-
-Reponds UNIQUEMENT en JSON valide sans texte avant/apres :
-{
-  \"predictions_journalieres\": [
-    {
-      \"date\": \"YYYY-MM-DD\",
-      \"jour_semaine\": \"Lundi\",
-      \"revenus_predit\": 12.45,
-      \"revenus_min\": 10.20,
-      \"revenus_max\": 14.80,
-      \"confidence\": \"high\",
-      \"confidence_pct\": 82,
-      \"tendance\": \"stable\",
-      \"variation_pct\": -2.3,
-      \"facteurs\": [\"Weekend moins actif\", \"Tendance stable semaine\"]
-    }
-  ],
-  \"predictions_par_service\": [
-    {
-      \"keyword\": \"mb1\",
-      \"nom_service\": \"SHOFHA\",
-      \"revenus_predit_7j\": 45.50,
-      \"tendance\": \"hausse\",
-      \"variation_pct\": 5.2
-    }
-  ],
-  \"resume_semaine\": {
-    \"total_predit\": 89.30,
-    \"meilleur_jour\": {\"date\": \"2026-04-10\", \"montant\": 15.20},
-    \"pire_jour\": {\"date\": \"2026-04-13\", \"montant\": 10.80},
-    \"comparaison_semaine_precedente_pct\": 3.5
-  },
-  \"analyse_detaillee\": {
-    \"tendance_generale\": \"texte 80 mots base sur vraies donnees\",
-    \"facteurs_positifs\": [\"fact1\", \"fact2\", \"fact3\"],
-    \"facteurs_risque\": [\"risque1\", \"risque2\"],
-    \"opportunites\": [\"opp1\", \"opp2\"],
-    \"services_surveiller\": [\"keyword1\", \"keyword2\"]
-  },
-  \"recommandations\": [
-    {
-      \"priorite\": \"haute\",
-      \"action\": \"texte court\",
-      \"impact_estime\": \"texte court\",
-      \"delai\": \"immediat\"
-    }
-  ],
-  \"score_fiabilite\": 78,
-  \"methodologie\": \"Analyse basee sur tendances 60j + patterns hebdomadaires\"
-}
-
-Important : genere exactement '.$horizon.' jours dans predictions_journalieres. Les dates doivent etre consecutives a partir de demain.';
+        // Schéma JSON compact (moins de champs pour éviter la troncature sur 14/30j)
+        $prompt = "Expert telecom. Donnees historiques revenus SMS (DT):\n{$jsonData}\n"
+            . $baselineStr . "\n"
+            . "Stats: moy7j={$metriques['moyenne_7j']} moy30j={$metriques['moyenne_30j']} vol={$metriques['ecart_type']} tendance={$tendanceDir}+{$tendanceVal}DT/j meilleurJour=" . ($mj ? $joursNoms[$mj] : 'N/A') . "\n\n"
+            . "Consignes strictes de prediction :\n"
+            . "1. Utilise la baseline statistique fournie comme ancrage de prediction.\n"
+            . "2. Ajuste finement ces valeurs de baseline en fonction des variations de week-end (variation weekend vs semaine de {$metriques['variation_weekend_vs_semaine_pct']}%), de la tendance lineaire, et de tes connaissances telecom (ex: rebond le lundi, baisse le weekend).\n"
+            . "3. Reste realiste : ne devie pas de plus de 15% par rapport a la baseline statistique sans justification solide.\n"
+            . "4. Remplis les 'facteurs' (acteurs de tendance) de chaque prediction journaliere avec des labels explicites (ex: \"Effet Weekend\", \"Rattrapage Lundi\", \"Croissance lineaire\").\n\n"
+            . "Reponds UNIQUEMENT en JSON strict, sans markdown, sans texte hors JSON:\n"
+            . "{\n"
+            . "  \"predictions_journalieres\": [\n"
+            . "    {\"date\":\"YYYY-MM-DD\",\"jour_semaine\":\"Lundi\",\"revenus_predit\":12.45,\"revenus_min\":10.20,\"revenus_max\":14.80,\"confidence_pct\":82,\"tendance\":\"stable\",\"variation_pct\":-2.3}\n"
+            . "  ],\n"
+            . "  \"predictions_par_service\": [\n"
+            . "    {\"keyword\":\"mb1\",\"nom_service\":\"SERVICE\",\"revenus_predit_7j\":45.50,\"tendance\":\"hausse\",\"variation_pct\":5.2}\n"
+            . "  ],\n"
+            . "  \"resume_semaine\": {\"total_predit\":89.30,\"meilleur_jour\":{\"date\":\"2026-04-10\",\"montant\":15.20},\"pire_jour\":{\"date\":\"2026-04-13\",\"montant\":10.80},\"comparaison_semaine_precedente_pct\":3.5},\n"
+            . "  \"analyse_detaillee\": {\"tendance_generale\":\"texte\",\"facteurs_positifs\":[\"f1\"],\"facteurs_risque\":[\"r1\"],\"opportunites\":[\"o1\"],\"services_surveiller\":[\"kw1\"]},\n"
+            . "  \"recommandations\": [{\"priorite\":\"haute\",\"action\":\"texte\",\"impact_estime\":\"texte\",\"delai\":\"immediat\"}],\n"
+            . "  \"score_fiabilite\": 78\n"
+            . "}\n\n"
+            . "Genere EXACTEMENT {$horizon} entrees dans predictions_journalieres, dates consecutives a partir de demain. Pas de commentaires, JSON pur uniquement.";
 
         return $prompt;
     }
@@ -676,6 +684,11 @@ Important : genere exactement '.$horizon.' jours dans predictions_journalieres. 
         if (!$content) return null;
 
         try {
+            // Nettoyer les balises markdown que certains modèles (Gemini) ajoutent
+            $content = preg_replace('/^```(?:json)?\s*/i', '', trim($content));
+            $content = preg_replace('/\s*```$/i', '', trim($content));
+            $content = trim($content);
+
             $data = json_decode($content, true);
 
             if (!$data) {
@@ -685,7 +698,10 @@ Important : genere exactement '.$horizon.' jours dans predictions_journalieres. 
                 }
             }
 
-            if (!$data) return null;
+            if (!$data) {
+                \Log::warning('[AI] Parse JSON failed, returning null. Content snippet: ' . substr($content, 0, 300));
+                return null;
+            }
 
             // Assure que score_fiabilite est toujours présent et valide
             if (!isset($data['score_fiabilite']) || $data['score_fiabilite'] === null || $data['score_fiabilite'] === 0) {
@@ -696,6 +712,7 @@ Important : genere exactement '.$horizon.' jours dans predictions_journalieres. 
             $data['score_fiabilite'] = max(1, min(100, (int)$data['score_fiabilite']));
 
             if (empty($data['predictions_journalieres'])) {
+                \Log::warning('[AI] Parse JSON success but predictions_journalieres is empty.');
                 return null;
             }
 
@@ -707,37 +724,54 @@ Important : genere exactement '.$horizon.' jours dans predictions_journalieres. 
                 $pred['confidence'] = $pred['confidence'] ?? 'medium';
                 $pred['tendance'] = $pred['tendance'] ?? 'stable';
                 $pred['variation_pct'] = (float)($pred['variation_pct'] ?? 0);
-                $pred['facteurs'] = $pred['facteurs'] ?? [];
+                
+                if (isset($pred['facteurs']) && is_string($pred['facteurs'])) {
+                    $pred['facteurs'] = array_filter(array_map('trim', explode(',', $pred['facteurs'])));
+                } elseif (!isset($pred['facteurs']) || !is_array($pred['facteurs'])) {
+                    $pred['facteurs'] = [];
+                }
             }
 
             return $data;
         } catch (\Exception $e) {
-            \Log::warning('[AI] Parse JSON échoué: ' . $e->getMessage() . ' | Content: ' . substr($content, 0, 200));
+            \Log::warning('[AI] Exception in parseAiResponse: ' . $e->getMessage());
             return null;
         }
     }
 
-    private function adjustScoreByProvider(array $predictions, string $provider, int $nbJoursHistorique): array
+    private function adjustScoreByProvider(array $predictions, string $provider, int $nbJoursHistorique, int $horizon = 7): array
     {
+        // 1. Score de base selon la quantité d'historique disponible
         $baseScore = 40;
-        if ($nbJoursHistorique >= 60) $baseScore = 80;
-        elseif ($nbJoursHistorique >= 30) $baseScore = 70;
-        elseif ($nbJoursHistorique >= 14) $baseScore = 60;
-        elseif ($nbJoursHistorique >= 7)  $baseScore = 50;
+        if ($nbJoursHistorique >= 90) $baseScore = 82;
+        elseif ($nbJoursHistorique >= 60) $baseScore = 76;
+        elseif ($nbJoursHistorique >= 30) $baseScore = 67;
+        elseif ($nbJoursHistorique >= 14) $baseScore = 57;
+        elseif ($nbJoursHistorique >= 7)  $baseScore = 48;
 
+        // 2. Bonus selon le moteur IA
         $providerBonus = match($provider) {
-            'groq'          => 15,  // Bonus augmenté
-            'gemini'        => 12,  // Bonus Gemini augmenté significativement
-            'php_fallback'  => -5,
-            default         => 0,
+            'groq'         => 12,
+            'mistral'      => 12,   // Même niveau de fiabilité que Groq
+            'php_fallback' => -8,
+            default        => 0,
         };
 
-        $finalScore = max(1, min(100, $baseScore + $providerBonus));
+        // 3. Pénalité horizon : prédire loin = moins fiable
+        $horizonPenalty = max(0, ($horizon - 7) * 0.6);
 
-        if (($predictions['score_fiabilite'] ?? 0) > 1) {
-            $predictions['score_fiabilite'] = max(1, min(100, $predictions['score_fiabilite'] + $providerBonus));
+        // Score calculé par notre formule
+        $formulaScore = max(1, min(95, $baseScore + $providerBonus - $horizonPenalty));
+
+        // 4. Si l'IA a retourné son propre score (non nul), on fait une MOYENNE PONDÉRÉE
+        // pour éviter de cumuler formule + score IA (ce qui causait des 100%)
+        $aiScore = $predictions['score_fiabilite'] ?? 0;
+        if ($aiScore > 1 && $provider !== 'php_fallback') {
+            // 60% ce que l'IA dit + 40% notre formule — plafond à 92% (on reste honnête)
+            $blended = ($aiScore * 0.6) + ($formulaScore * 0.4) - $horizonPenalty;
+            $predictions['score_fiabilite'] = max(1, min(92, (int) round($blended)));
         } else {
-            $predictions['score_fiabilite'] = $finalScore;
+            $predictions['score_fiabilite'] = $formulaScore;
         }
 
         return $predictions;

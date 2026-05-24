@@ -21,9 +21,13 @@ class ChatbotService
 
         $sql = $this->generateSqlQuery($question, $user->role);
         \Illuminate\Support\Facades\Log::info("[Chatbot] SQL generated for '{$question}': {$sql}");
+        
         $results = $this->executeQuery($sql);
         $summary = $this->summarizeResults($results);
         $response = $this->generateResponse($question, $summary);
+
+        // Log the job in ra_t_etl_jobs
+        $this->logChatbotJob($question, $summary, $user);
 
         return [
             'question' => $question,
@@ -31,6 +35,37 @@ class ChatbotService
             'data' => $summary,
             'sql_query' => $sql,
         ];
+    }
+
+    /**
+     * Loggue l'appel au chatbot dans la table ra_t_etl_jobs pour le monitoring.
+     */
+    protected function logChatbotJob(string $question, array $summary, object $user): void
+    {
+        try {
+            DB::table('ra_t_etl_jobs')->insert([
+                'job_name' => 'chatbot_analysis',
+                'category' => 'AI_CHAT',
+                'source' => 'Groq/Gemini',
+                'status' => 'success',
+                'started_at' => now(),
+                'finished_at' => now(),
+                'duration_ms' => 0,
+                'total_rows' => $summary['total_count'] ?? 0,
+                'processed_rows' => $summary['total_count'] ?? 0,
+                'triggered_by' => $user->id ?? 1,
+                'user_email' => $user->email ?? 'unknown',
+                'page' => 'Chatbot',
+                'metadata' => json_encode([
+                    'question' => $question,
+                    'is_complete' => $summary['is_complete'] ?? true,
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("[Chatbot] Error logging job: " . $e->getMessage());
+        }
     }
 
     protected function generateSqlQuery(string $question, string $userRole): string
@@ -151,9 +186,14 @@ class ChatbotService
 
     protected function generateResponse(string $question, array $summary): string
     {
-        $prompt = "Tu es un assistant en francais qui explique les resultats d'analyse CDR de maniere claire et concise. ";
-        $prompt .= 'Ne parle pas de la requete SQL. ';
-        $prompt .= 'Utilise uniquement le resume JSON suivant : '.json_encode($summary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).'.';
+        $prompt = "Tu es un assistant en français qui explique les résultats d'analyse CDR. ";
+        $prompt .= 'Ne parle pas de la requête SQL brute. ';
+        $prompt .= "CONSIGNES : ";
+        $prompt .= "1. Si plusieurs numéros ont la même activité, mentionne-les comme étant ex-æquo. ";
+        $prompt .= "2. Si le résultat est tronqué, précise que l'analyse porte sur le total mais que tu n'affiches que le top. ";
+        $prompt .= "3. Sois précis sur les chiffres (nombre de transactions, revenus). ";
+        $prompt .= "4. Si la question est 'le plus actif' et que tu vois plusieurs résultats avec le même score dans le JSON, cite-les tous. ";
+        $prompt .= 'Utilise uniquement le résumé JSON suivant : '.json_encode($summary, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).'.';
 
         $aiResponse = $this->aiProvider->complete($prompt, $question, 400, 0.6);
         return trim($aiResponse['content']);
@@ -172,11 +212,18 @@ class ChatbotService
 
     protected function summarizeResults(array $results): array
     {
+        $count = count($results);
         return [
-            'total_count' => count($results),
-            'columns' => count($results) > 0 ? array_keys($results[0]) : [],
-            'sample' => array_slice($results, 0, 50),
-            'note' => count($results) > 50 ? "Les données ont été tronquées à 50 lignes sur un total de " . count($results) : "Toutes les données correspondantes sont incluses."
+            'total_count' => $count,
+            'count' => $count, // Compatibilité frontend
+            'columns' => $count > 0 ? array_keys($results[0]) : [],
+            // Retourne TOUS les résultats si <= 50, sinon tronque pour le contexte de l'IA
+            'data' => array_slice($results, 0, 50),
+            'sample' => array_slice($results, 0, 50), // Compatibilité
+            'is_complete' => $count <= 50,
+            'note' => $count > 50 
+                ? "Résultats tronqués à 50/{$count}. L'analyse porte sur le total mais l'IA ne voit que le top 50."
+                : "Résultats complets ({$count} lignes)."
         ];
     }
 
@@ -249,6 +296,8 @@ class ChatbotService
 
         $prompt = 'Tu es un assistant IA qui genere uniquement une requete SQL SELECT valide pour PostgreSQL. ';
         $prompt .= 'Ne fournis aucune explication. Reponds uniquement avec la requete SQL brute, sans bloc markdown. ';
+        $prompt .= 'IMPORTANT : La requete DOIT commencer par SELECT. N\'utilise JAMAIS de CTE (WITH ... AS). Utilise toujours des sous-requetes ou des jointures simples. ';
+        $prompt .= 'Pour combiner des aggregations entre OCC et MMG, utilise obligatoirement une sous-requete globale (ex: SELECT a_msisdn, SUM(c) FROM (SELECT a_msisdn, COUNT(*) as c FROM occ GROUP BY a_msisdn UNION ALL SELECT a_msisdn, COUNT(*) as c FROM mmg GROUP BY a_msisdn) as combined GROUP BY a_msisdn ORDER BY sum DESC LIMIT 10). N\'utilise jamais de ORDER BY ou LIMIT directement autour du UNION ALL. ';
         $prompt .= "CONTEXTE COMMERCIAL DES SERVICES :\n$mapping\n";
         $prompt .= "Si l'utilisateur demande un service par son nom commercial (ex: Shofha), utilise le Keyword technique correspondant (ex: mb1) dans la clause WHERE sur ra_t_occ_cdr_detail.keyword ou ra_t_mmg_cdr_det.service_type.\n";
         $prompt .= "IMPORTANT : Pour les questions d'analyse (ex: 'le plus actif', 'total des revenus', 'top 5'), effectue TOUJOURS l'agrégation directement en SQL (GROUP BY, COUNT, SUM, ORDER BY, LIMIT). Ne renvoie jamais une liste brute si un calcul est possible. Récupère au moins le TOP 5 des résultats pour avoir du contexte même si l'utilisateur en demande un seul.\n";
@@ -302,10 +351,19 @@ class ChatbotService
         $prompt .= "\nINSTRUCTIONS FINALES : ";
         $prompt .= "1. Pour les questions d'analyse (ex: 'le plus actif', 'top', 'total'), effectue TOUJOURS l'agrégation en SQL (GROUP BY, COUNT, SUM, ORDER BY). ";
         $prompt .= "2. Inclus TOUJOURS la colonne de calcul (ex: SELECT a_msisdn, COUNT(*) as nb_appels) pour que l'IA puisse voir les chiffres. ";
-        $prompt .= "3. Utilise TOUJOURS 'LIMIT 10' (au minimum) pour les classements. ";
-        $prompt .= "4. Si l'utilisateur demande 'le plus actif' sans préciser la table, cherche dans les DEUX tables (OCC et MMG) via un UNION ALL. ";
+        $prompt .= "3. Utilise TOUJOURS 'LIMIT 10' (au minimum) pour les classements, et TOUJOURS après le ORDER BY. ";
+        $prompt .= "4. Si l'utilisateur demande 'le plus actif', 'le top' ou 'total' sans préciser le type de service : ";
+        $prompt .= "   - N'AJOUTE PAS de filtre call_type = 'VAS' automatiquement, sauf si la question mentionne explicitement SMS+. ";
+        $prompt .= "   - Affiche le total toutes catégories confondues (VAS, DATA, SMS, VOICE). ";
+        $prompt .= "   - Exemple CORRECT : SELECT a_msisdn, COUNT(*) as total FROM ra_t_occ_cdr_detail GROUP BY a_msisdn ORDER BY total DESC LIMIT 10. ";
         $prompt .= "5. NE FILTRE PAS par un service spécifique (keyword = ...) sauf si l'utilisateur le demande explicitement. ";
-        $prompt .= "6. Si tes résultats sont limités par un LIMIT, ne dis JAMAIS que c'est le 'seul' résultat de la base.";
+        $prompt .= "6. Si tes résultats sont limités par un LIMIT, ne dis JAMAIS que c'est le 'seul' résultat de la base. ";
+        $prompt .= "7. RÈGLES CRITIQUES : ";
+        $prompt .= "   - INCLUS TOUJOURS LA COLONNE DE CALCUL (ex: nb, total, revenus) dans le SELECT. L'IA a besoin de voir ces chiffres pour répondre. ";
+        $prompt .= "   - TOUJOURS analyser TOUTES les données : ne JAMAIS ajouter LIMIT avant le ORDER BY final. ";
+        $prompt .= "   - Le COUNT(*) doit porter sur toute la table filtrée. ";
+        $prompt .= "   - Pour compter les transactions : utilisez COUNT(*) (pas DISTINCT sauf demande explicite). ";
+        $prompt .= "   - Pour 'le plus actif', récupère toujours au moins 5 ou 10 lignes pour que l'IA puisse voir s'il y a des égalités.";
 
         return trim($prompt);
     }
@@ -319,10 +377,13 @@ class ChatbotService
         $sql = preg_replace('/[\r\n]+/', ' ', $sql);
         $sql = trim($sql, " \t\n\r\0\x0B;");
 
-        if (! preg_match('/^\s*select\b/i', $sql)) {
+        // Accepter SELECT et WITH ... SELECT (CTE) — les deux sont des requêtes en lecture seule
+        if (!preg_match('/^\s*(select|with)\b/i', $sql)) {
+            \Illuminate\Support\Facades\Log::warning('[Chatbot] SQL rejeté (ne commence pas par SELECT/WITH): ' . substr($sql, 0, 200));
             throw new \RuntimeException('Requete SQL non autorisee.');
         }
 
+        // Mots-clés dangereux (mutation de données)
         if (preg_match('/\b(drop|delete|update|insert|alter|truncate|create|replace|grant|revoke)\b/i', $sql)) {
             throw new \RuntimeException('Requete SQL non autorisee.');
         }

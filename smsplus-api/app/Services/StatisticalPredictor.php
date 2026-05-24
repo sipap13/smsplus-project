@@ -46,11 +46,11 @@ class StatisticalPredictor
         }
 
         $predictions = [];
-        $lastDate    = end($dates);
+        $lastDate    = date('Y-m-d'); // On commence à prédire à partir d'aujourd'hui/demain
         $baseValue   = end($revenus);
 
         for ($i = 1; $i <= $horizon; $i++) {
-            $date      = date('Y-m-d', strtotime($lastDate . " +{$i} days"));
+            $date      = date('Y-m-d', strtotime("tomorrow +".($i-1)." days"));
             $dayOfWeek = (int) date('N', strtotime($date));
             $dayName   = $this->frenchDayName($dayOfWeek);
 

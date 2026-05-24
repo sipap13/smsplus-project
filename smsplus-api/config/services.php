@@ -43,12 +43,12 @@ return [
         'timeout' => env('GROQ_TIMEOUT', 30),
     ],
 
-    'gemini' => [
-        'api_key' => env('GEMINI_API_KEY'),
-        'model'   => env('GEMINI_MODEL', 'gemini-1.5-flash'),
-        'timeout' => env('GEMINI_TIMEOUT', 30),
-        'url'     => 'https://generativelanguage.googleapis.com/v1beta/models/',
-        'enabled' => env('GEMINI_ENABLED', true),
+    'mistral' => [
+        'api_key' => env('MISTRAL_API_KEY'),
+        'model'   => env('MISTRAL_MODEL', 'mistral-small-latest'),
+        'url'     => 'https://api.mistral.ai/v1/chat/completions',
+        'timeout' => env('MISTRAL_TIMEOUT', 30),
+        'enabled' => env('MISTRAL_ENABLED', true),
     ],
 
 ];

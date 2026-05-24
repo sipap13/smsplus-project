@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect } from 'react';
 
 export default function Toast({ toast, onClose }) {

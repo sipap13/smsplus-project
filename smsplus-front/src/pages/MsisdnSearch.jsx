@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
-import JobStatusBar from '../components/JobStatusBar';
 import { formatDT } from '../lib/format';
 import MsisdnTimeline from '../components/MsisdnTimeline';
 import useServiceMapping from '../hooks/useServiceMapping';
 
 const OCC_COLS = [
-  { key: 'a_msisdn', label: 'Appelant' },
-  { key: 'b_msisdn', label: 'Appelé' },
+  { key: 'a_msisdn', label: 'MSISDN Appelant' },
+  { key: 'b_msisdn', label: 'MSISDN Destinataire' },
   { key: 'start_date', label: 'Date' },
   { key: 'start_hour', label: 'Heure' },
   { key: 'call_type', label: 'Type' },
@@ -18,8 +17,8 @@ const OCC_COLS = [
 ];
 
 const MMG_COLS = [
-  { key: 'a_msisdn', label: 'Appelant' },
-  { key: 'b_msisdn', label: 'Appelé' },
+  { key: 'a_msisdn', label: 'MSISDN Appelant' },
+  { key: 'b_msisdn', label: 'MSISDN Destinataire' },
   { key: 'start_date', label: 'Date' },
   { key: 'start_hour', label: 'Heure' },
   { key: 'event_type', label: 'Événement' },
@@ -96,7 +95,7 @@ export default function MsisdnSearch() {
 
   const renderTable = (rows, cols, emptyMsg) => (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+      <table style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', tableLayout: 'auto' }}>
         <thead>
           <tr style={{ background: 'var(--bg-surface)' }}>
             {cols.map(c => <th key={c.key} style={thStyle}>{c.label}</th>)}
@@ -187,16 +186,6 @@ export default function MsisdnSearch() {
         {error && <div style={{ flexBasis: '100%', color: '#ef4444', fontSize: '0.88rem', fontWeight: 500 }}>⚠ {error}</div>}
       </div>
 
-      <JobStatusBar
-        mode="timeline"
-        jobTypes={['msisdn_search_all', 'msisdn_reclamations_search', 'msisdn_timeline_build', 'ai_risk_score']}
-        steps={[
-          { jobName: 'msisdn_search_all', label: 'CDR' },
-          { jobName: 'msisdn_reclamations_search', label: 'Réclamations' },
-          { jobName: 'msisdn_timeline_build', label: 'Timeline' },
-          { jobName: 'ai_risk_score', label: 'Analyse IA' },
-        ]}
-      />
 
       {hasResults && (
         <>

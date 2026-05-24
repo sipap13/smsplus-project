@@ -7,6 +7,63 @@ use Illuminate\Support\Facades\Request;
 
 class EtlMonitorService
 {
+    /**
+     * Normalise les compteurs (total_rows / processed_rows / error_rows) depuis metadata.
+     * Retourne toujours un tableau avec les clés si elles peuvent être déduites.
+     */
+    public function normalizeRowCounts(array $metadata, ?EtlJob $job = null): array
+    {
+        $normalized = [];
+
+        if (isset($metadata['total_rows'])) {
+            $normalized['total_rows'] = (int) $metadata['total_rows'];
+        } elseif (isset($metadata['nb_lignes'])) {
+            $normalized['total_rows'] = (int) $metadata['nb_lignes'];
+        }
+
+        if (isset($metadata['processed_rows'])) {
+            $normalized['processed_rows'] = (int) $metadata['processed_rows'];
+        } elseif (isset($metadata['rows_processed'])) {
+            $normalized['processed_rows'] = (int) $metadata['rows_processed'];
+        } elseif (isset($metadata['rows_inserted'])) {
+            $normalized['processed_rows'] = (int) $metadata['rows_inserted'];
+        } elseif (isset($metadata['nb_resultats'])) {
+            $normalized['processed_rows'] = (int) $metadata['nb_resultats'];
+        } elseif (isset($metadata['nb_reclamations'])) {
+            $normalized['processed_rows'] = (int) $metadata['nb_reclamations'];
+        } elseif (isset($metadata['nb_services'])) {
+            $normalized['processed_rows'] = (int) $metadata['nb_services'];
+        } elseif (isset($metadata['nb_alertes'])) {
+            $normalized['processed_rows'] = (int) $metadata['nb_alertes'];
+        } elseif (isset($metadata['nb_transactions'])) {
+            $normalized['processed_rows'] = (int) $metadata['nb_transactions'];
+        } elseif (isset($metadata['nb_points'])) {
+            $normalized['processed_rows'] = (int) $metadata['nb_points'];
+        } elseif (isset($metadata['count'])) {
+            $normalized['processed_rows'] = (int) $metadata['count'];
+        }
+
+        if (isset($metadata['error_rows'])) {
+            $normalized['error_rows'] = (int) $metadata['error_rows'];
+        } elseif (isset($metadata['rows_skipped'])) {
+            $normalized['error_rows'] = (int) $metadata['rows_skipped'];
+        }
+
+        // Cas particulier: job système/commande/rapport réussis mais sans volume.
+        if (
+            $job &&
+            ($normalized['processed_rows'] ?? null) === null &&
+            ($normalized['total_rows'] ?? null) === null
+        ) {
+            if (in_array($job->category, ['systeme', 'command', 'rapport'], true)) {
+                $normalized['processed_rows'] = 1;
+            }
+        }
+
+        return $normalized;
+    }
+
+
     public function startJob(string $jobName, string $category = 'command', ?string $source = null, int $totalLignes = 0, array $metadata = []): EtlJob
     {
         $page = $metadata['page'] ?? null;
@@ -39,47 +96,17 @@ class EtlMonitorService
         if (!empty($metadata)) {
             $updateData['metadata'] = array_merge((array) ($job->metadata ?? []), $metadata);
             
-            // Update row counts using correct column names
-            if (isset($metadata['total_rows'])) {
-                $updateData['total_rows'] = $metadata['total_rows'];
-            } elseif (isset($metadata['nb_lignes'])) {
-                $updateData['total_rows'] = $metadata['nb_lignes'];
+            $normalized = $this->normalizeRowCounts($metadata, $status === 'success' ? $job : null);
+            if (isset($normalized['total_rows'])) {
+                $updateData['total_rows'] = $normalized['total_rows'];
+            }
+            if (isset($normalized['processed_rows'])) {
+                $updateData['processed_rows'] = $normalized['processed_rows'];
+            }
+            if (isset($normalized['error_rows'])) {
+                $updateData['error_rows'] = $normalized['error_rows'];
             }
 
-            if (isset($metadata['processed_rows'])) {
-                $updateData['processed_rows'] = $metadata['processed_rows'];
-            } elseif (isset($metadata['rows_processed'])) {
-                $updateData['processed_rows'] = $metadata['rows_processed'];
-            } elseif (isset($metadata['rows_inserted'])) {
-                $updateData['processed_rows'] = $metadata['rows_inserted'];
-            } elseif (isset($metadata['nb_resultats'])) {
-                $updateData['processed_rows'] = $metadata['nb_resultats'];
-            } elseif (isset($metadata['nb_reclamations'])) {
-                $updateData['processed_rows'] = $metadata['nb_reclamations'];
-            } elseif (isset($metadata['nb_services'])) {
-                $updateData['processed_rows'] = $metadata['nb_services'];
-            } elseif (isset($metadata['nb_alertes'])) {
-                $updateData['processed_rows'] = $metadata['nb_alertes'];
-            } elseif (isset($metadata['nb_transactions'])) {
-                $updateData['processed_rows'] = $metadata['nb_transactions'];
-            } elseif (isset($metadata['nb_points'])) {
-                $updateData['processed_rows'] = $metadata['nb_points'];
-            } elseif (isset($metadata['count'])) {
-                $updateData['processed_rows'] = $metadata['count'];
-            }
-
-            if (isset($metadata['error_rows'])) {
-                $updateData['error_rows'] = $metadata['error_rows'];
-            } elseif (isset($metadata['rows_skipped'])) {
-                $updateData['error_rows'] = $metadata['rows_skipped'];
-            }
-
-            // Si c'est un job système/commande/rapport réussi mais sans volume, on met 1 par défaut
-            if ($status === 'success' && empty($updateData['processed_rows']) && empty($updateData['total_rows'])) {
-                if (in_array($job->category, ['systeme', 'command', 'rapport'])) {
-                    $updateData['processed_rows'] = 1;
-                }
-            }
         }
         
         $job->update($updateData);
@@ -106,17 +133,17 @@ class EtlMonitorService
         if (!empty($metadata)) {
             $updateData['metadata'] = array_merge((array) ($job->metadata ?? []), $metadata);
             
-            if (isset($metadata['total_rows'])) {
-                $updateData['total_rows'] = $metadata['total_rows'];
+            $normalized = $this->normalizeRowCounts($metadata);
+            if (isset($normalized['total_rows'])) {
+                $updateData['total_rows'] = $normalized['total_rows'];
             }
-            if (isset($metadata['processed_rows'])) {
-                $updateData['processed_rows'] = $metadata['processed_rows'];
-            } elseif (isset($metadata['rows_inserted'])) {
-                $updateData['processed_rows'] = $metadata['rows_inserted'];
+            if (isset($normalized['processed_rows'])) {
+                $updateData['processed_rows'] = $normalized['processed_rows'];
             }
-            if (isset($metadata['error_rows'])) {
-                $updateData['error_rows'] = $metadata['error_rows'];
+            if (isset($normalized['error_rows'])) {
+                $updateData['error_rows'] = $normalized['error_rows'];
             }
+
         }
         
         if (!empty($updateData)) {

@@ -48,4 +48,41 @@ class ChatbotController extends Controller
             ], 500);
         }
     }
+
+    public function verifyAnswer(Request $request)
+    {
+        $question = $request->input('question');
+        $answer   = $request->input('answer');
+
+        // Requête de vérification directe sans passer par l'IA
+        $verification = [];
+
+        if (str_contains(strtolower($question), 'plus actif')) {
+            $top = \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')
+                ->where('call_type', 'VAS')
+                ->select('a_msisdn',
+                    \Illuminate\Support\Facades\DB::raw('COUNT(*) as nb_transactions'),
+                    \Illuminate\Support\Facades\DB::raw('SUM(charge_amount) as revenus')
+                )
+                ->groupBy('a_msisdn')
+                ->orderByDesc('nb_transactions')
+                ->limit(5)
+                ->get();
+
+            $verification = [
+                'top_5_msisdns' => $top,
+                'total_lignes_analysees' => \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')
+                    ->where('call_type', 'VAS')
+                    ->count(),
+                'reponse_chatbot_correcte' => $top->first()?->a_msisdn === $answer,
+            ];
+        }
+
+        return response()->json([
+            'question'     => $question,
+            'answer'       => $answer,
+            'verification' => $verification,
+            'sql_utilisee' => 'SELECT a_msisdn, COUNT(*) as nb FROM ra_t_occ_cdr_detail WHERE call_type = \'VAS\' GROUP BY a_msisdn ORDER BY nb DESC LIMIT 5',
+        ]);
+    }
 }

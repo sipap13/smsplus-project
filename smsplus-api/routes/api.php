@@ -105,6 +105,7 @@ Route::get('/cdr/msisdn/{msisdn}/timeline', [CdrController::class, 'timeline'])-
 // Fraud detection (usage élevé)
 Route::get('/fraud/usage-high', [FraudController::class, 'usageHigh'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
 Route::post('/chatbot/analyze', [ChatbotController::class, 'analyze'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP,ANALYSTE_BUSS']);
+Route::get('/chatbot/verify-answer', [ChatbotController::class, 'verifyAnswer'])->middleware(['auth.api', 'role:ADMIN']);
 Route::post('/ai/chat', [AiChatController::class, 'chat'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP,ANALYSTE_BUSS']);
 Route::get('/ai/health', [AiHealthController::class, 'health'])->middleware(['auth.api', 'role:ADMIN,ANALYSTE_OP']);
 

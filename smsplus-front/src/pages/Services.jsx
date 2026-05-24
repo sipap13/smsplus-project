@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -28,6 +28,7 @@ export default function Services() {
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
   const [filtreAlerte, setFiltreAlerte] = useState('tous');
+  const [filtreFournisseur, setFiltreFournisseur] = useState('tous');
   const navigate = useNavigate();
 
   const load = () => {
@@ -130,10 +131,42 @@ export default function Services() {
     );
   };
 
+  const fournisseurs = [...new Set(services.map(s => s.nom_fournisseur).filter(Boolean))].sort();
+
   const servicesFiltres = services.filter((s) => {
-    if (filtreAlerte === 'avec_alertes') return (s.nb_alertes_ouvertes || 0) > 0;
-    if (filtreAlerte === 'sans_alertes') return (s.nb_alertes_ouvertes || 0) === 0;
+    if (filtreAlerte === 'avec_alertes' && (s.nb_alertes_ouvertes || 0) === 0) return false;
+    if (filtreAlerte === 'sans_alertes' && (s.nb_alertes_ouvertes || 0) > 0) return false;
+    if (filtreFournisseur !== 'tous' && s.nom_fournisseur !== filtreFournisseur) return false;
     return true;
+  });
+
+  const servicesGroupes = servicesFiltres.reduce((acc, s) => {
+    const key = `${s.nom_service}-${s.nom_fournisseur}`;
+    if (!acc[key]) {
+      acc[key] = { ...s, all_ids: [s.id], numeros: [s.numero_court], prix_list: [s.prix], keywords: [s.keyword] };
+    } else {
+      acc[key].all_ids.push(s.id);
+      if (!acc[key].numeros.includes(s.numero_court)) acc[key].numeros.push(s.numero_court);
+      if (!acc[key].prix_list.includes(s.prix)) acc[key].prix_list.push(s.prix);
+      if (!acc[key].keywords.includes(s.keyword)) acc[key].keywords.push(s.keyword);
+      acc[key].nb_cdr_30j = Number(acc[key].nb_cdr_30j || 0) + Number(s.nb_cdr_30j || 0);
+      acc[key].revenus_30j = Number(acc[key].revenus_30j || 0) + Number(s.revenus_30j || 0);
+      acc[key].nb_abonnes_30j = Number(acc[key].nb_abonnes_30j || 0) + Number(s.nb_abonnes_30j || 0);
+      acc[key].nb_alertes_ouvertes = Number(acc[key].nb_alertes_ouvertes || 0) + Number(s.nb_alertes_ouvertes || 0);
+      acc[key].total_sms_suspects = Number(acc[key].total_sms_suspects || 0) + Number(s.total_sms_suspects || 0);
+    }
+    return acc;
+  }, {});
+
+  const displayedServices = Object.values(servicesGroupes).map(s => {
+    const prixNums = s.prix_list.map(p => parseFloat(p)).filter(Number.isFinite);
+    return {
+      ...s,
+      numero_court: s.numeros.join(', '),
+      keyword: s.keywords.join(', '),
+      prixDisplay: prixNums.length > 1 ? `${Math.min(...prixNums).toFixed(3)} - ${Math.max(...prixNums).toFixed(3)}` : (prixNums.length === 1 ? prixNums[0].toFixed(3) : '—'),
+      isGroup: s.all_ids.length > 1
+    };
   });
 
   const totalSmsSuspectsGlobal = services.reduce((sum, s) => sum + Number(s.total_sms_suspects || 0), 0);
@@ -200,23 +233,33 @@ export default function Services() {
       )}
 
       {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '1.25rem' }}>
-        {[
-          { id: 'tous', label: `Tous (${services.length})` },
-          { id: 'avec_alertes', label: `Avec alertes (${servicesAvecAlertes.length})` },
-          { id: 'sans_alertes', label: `Sans alertes (${services.length - servicesAvecAlertes.length})` },
-        ].map(f => (
-          <button key={f.id}
-            onClick={() => setFiltreAlerte(f.id)}
-            style={{
-              height: '34px', padding: '0 14px', fontSize: '0.82rem', fontWeight: 600,
-              borderRadius: '8px', border: '1px solid var(--border)', cursor: 'pointer',
-              background: filtreAlerte === f.id ? '#6366f1' : 'var(--bg-surface)',
-              color: filtreAlerte === f.id ? 'white' : 'var(--text-muted)',
-              transition: 'all 0.15s'
-            }}
-          >{f.label}</button>
-        ))}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[
+            { id: 'tous', label: `Tous (${services.length})` },
+            { id: 'avec_alertes', label: `Avec alertes (${servicesAvecAlertes.length})` },
+            { id: 'sans_alertes', label: `Sans alertes (${services.length - servicesAvecAlertes.length})` },
+          ].map(f => (
+            <button key={f.id}
+              onClick={() => setFiltreAlerte(f.id)}
+              style={{
+                height: '34px', padding: '0 14px', fontSize: '0.82rem', fontWeight: 600,
+                borderRadius: '8px', border: '1px solid var(--border)', cursor: 'pointer',
+                background: filtreAlerte === f.id ? '#6366f1' : 'var(--bg-surface)',
+                color: filtreAlerte === f.id ? 'white' : 'var(--text-muted)',
+                transition: 'all 0.15s'
+              }}
+            >{f.label}</button>
+          ))}
+        </div>
+        <select
+          value={filtreFournisseur}
+          onChange={(e) => setFiltreFournisseur(e.target.value)}
+          style={{ height: '34px', borderRadius: '8px', border: '1px solid var(--border)', padding: '0 12px', fontSize: '0.82rem', fontWeight: 600, background: 'var(--bg-surface)', color: 'var(--text-main)' }}
+        >
+          <option value="tous">Tous les fournisseurs</option>
+          {fournisseurs.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
       </div>
 
       {msg && (
@@ -366,9 +409,8 @@ export default function Services() {
               </tr>
             </thead>
             <tbody>
-              {servicesFiltres.map((s) => {
-                const prixNum = parseFloat(s.prix, 10);
-                const prixLabel = Number.isFinite(prixNum) ? prixNum.toFixed(3) : '—';
+              {displayedServices.map((s) => {
+                const prixLabel = s.prixDisplay;
                 const hasAlerts = (s.nb_alertes_ouvertes || 0) > 0;
 
                 return (

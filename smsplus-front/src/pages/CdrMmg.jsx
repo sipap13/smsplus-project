@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
-import JobStatusBar from '../components/JobStatusBar';
 import useServiceMapping from '../hooks/useServiceMapping';
 
 const PER_PAGE = 50;
@@ -115,9 +114,8 @@ export default function CdrMmg() {
   };
 
   const cols = [
-    { key: 'ne', label: 'NE' },
-    { key: 'a_msisdn', label: 'A MSISDN' },
-    { key: 'b_msisdn', label: 'B MSISDN' },
+    { key: 'a_msisdn', label: 'MSISDN Appelant' },
+    { key: 'b_msisdn', label: 'MSISDN Destinataire' },
     { key: 'start_date', label: 'Date' },
     { key: 'start_hour', label: 'Heure' },
     { key: 'event_type', label: 'Event type' },
@@ -207,7 +205,6 @@ export default function CdrMmg() {
               </>
             ) : (
               <>
-                <span>⬇</span>
                 Exporter Excel
               </>
             )}
@@ -215,14 +212,7 @@ export default function CdrMmg() {
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem', textAlign: 'center' }}>Max 10 000 lignes</span>
         </div>
         
-        {/* Job Status Dropdown */}
-        <JobStatusBar
-          jobTypes={['etl_agg_from_raw', 'etl_cdr_from_tmp', 'import_mmg_csv', 'notifications_polling']}
-          title=""
-          compact={false}
-          refreshInterval={10000}
-          mode="dropdown"
-        />
+
       </div>
 
       {error && (
@@ -241,7 +231,7 @@ export default function CdrMmg() {
         {loading ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Chargement…</p>
         ) : (
-          <table className="table-mobile table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="table-mobile table-dense" style={{ minWidth: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
             <thead>
               <tr>
                 {cols.map((c) => (

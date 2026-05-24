@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 function SidebarIcon({ name }) {
   const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.9', strokeLinecap: 'round', strokeLinejoin: 'round' };
   if (name === 'dashboard') {
@@ -100,12 +100,13 @@ export default function Sidebar({ user, activePage, onNavigate, unreadCount = 0 
       ))}
 
       <div className="sidebar-role-badge" style={{ 
-        background: 'rgba(11, 102, 195, 0.08)', 
-        border: '1px solid rgba(11, 102, 195, 0.2)',
+        background: 'var(--primary-soft)', 
+        border: '1px solid var(--ring)',
         margin: '1.5rem 0.8rem 0',
-        padding: '0.85rem'
+        padding: '0.85rem',
+        borderRadius: 'var(--radius)'
       }}>
-        <div style={{ fontSize: '0.62rem', marginBottom: '0.2rem', textTransform: 'uppercase', color: 'var(--primary)', opacity: 0.7, fontWeight: 700 }}>Privilèges</div>
+        <div style={{ fontSize: '0.62rem', marginBottom: '0.2rem', textTransform: 'uppercase', color: 'var(--text-muted)', opacity: 0.9, fontWeight: 700 }}>Privilèges</div>
         <div style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.88rem', letterSpacing: '0.02em' }}>{user.role.replace('_', ' ')}</div>
       </div>
     </div>

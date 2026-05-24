@@ -4,7 +4,7 @@ import { authNavigate } from '../lib/authNavigation';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8001/api',
   headers: { 'Accept': 'application/json' },
-  timeout: 30000,
+  timeout: 60000,
 });
 
 api.interceptors.request.use((config) => {

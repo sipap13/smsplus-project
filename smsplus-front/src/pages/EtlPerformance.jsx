@@ -37,7 +37,7 @@ const getJobLabel = (jobName) => {
   return jobName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
+const COLORS = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9', '#7ab8e0', '#9ecae1'];
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -171,10 +171,10 @@ export default function EtlPerformance() {
 
       {/* KPI Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <KPICard label="Types de jobs" value={uniqueJobTypes} sub={`sur ${days}j`} color="#6366f1" />
-        <KPICard label="Exécutions totales" value={totalJobs.toLocaleString()} sub={`sur ${days}j`} color="#10b981" />
-        <KPICard label="Lignes traitées" value={totalRows > 0 ? totalRows.toLocaleString() : '—'} sub="volume cumulé" color="#f59e0b" />
-        <KPICard label="Durée moyenne" value={`${avgDuration}s`} sub="tous jobs confondus" color="#8b5cf6" />
+        <KPICard label="Types de jobs" value={uniqueJobTypes} sub={`sur ${days}j`} color="#1e3a5f" />
+        <KPICard label="Exécutions totales" value={totalJobs.toLocaleString()} sub={`sur ${days}j`} color="#2a5082" />
+        <KPICard label="Lignes traitées" value={totalRows > 0 ? totalRows.toLocaleString() : '—'} sub="volume cumulé" color="#3b6fa0" />
+        <KPICard label="Durée moyenne" value={`${avgDuration}s`} sub="tous jobs confondus" color="#4a8ec2" />
       </div>
 
       {loading ? (

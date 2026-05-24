@@ -7,7 +7,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 
-const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
+const COLORS = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2'];
 
 const IconWrapper = ({ children, size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -77,7 +77,7 @@ export default function Duplicates() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [results, setResults] = useState([]);
-  const [source, setSource] = useState('occ');
+  const [source, setSource] = useState('all');
   const [dateDebut, setDateDebut] = useState('');
   const [minOccurrences, setMinOccurrences] = useState(2);
   const [keyword, setKeyword] = useState('');
@@ -123,9 +123,22 @@ export default function Duplicates() {
   const fetchResults = async () => {
     setLoading(true);
     try {
-      const endpoint = source === 'occ' ? '/duplicates/occ' : '/duplicates/mmg';
-      const res = await api.get(`${endpoint}?date_debut=${dateDebut}&min_occurrences=${minOccurrences}&keyword=${keyword}&call_type=${callType}`);
-      setResults(res.data);
+      if (source === 'all') {
+        const [resOcc, resMmg] = await Promise.all([
+          api.get(`/duplicates/occ?date_debut=${dateDebut}&min_occurrences=${minOccurrences}&keyword=${keyword}&call_type=${callType}`),
+          api.get(`/duplicates/mmg?date_debut=${dateDebut}&min_occurrences=${minOccurrences}&keyword=${keyword}`)
+        ]);
+        const merged = [
+          ...resOcc.data.map(item => ({ ...item, _source: 'occ' })),
+          ...resMmg.data.map(item => ({ ...item, _source: 'mmg' }))
+        ];
+        merged.sort((a, b) => b.occurrences - a.occurrences);
+        setResults(merged);
+      } else {
+        const endpoint = source === 'occ' ? '/duplicates/occ' : '/duplicates/mmg';
+        const res = await api.get(`${endpoint}?date_debut=${dateDebut}&min_occurrences=${minOccurrences}&keyword=${keyword}&call_type=${callType}`);
+        setResults(res.data.map(item => ({ ...item, _source: source })));
+      }
     } catch (err) {
       console.error("Failed to fetch duplicates", err);
     } finally {
@@ -256,7 +269,7 @@ export default function Duplicates() {
           </div>
           {stats?.date_debut_effective && (
             <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(var(--primary-rgb), 0.05)', padding: '4px 12px', borderRadius: '99px', border: '1px solid var(--border)' }}>
-              Analyse du <strong>{new Date(stats.date_debut_effective).toLocaleDateString()}</strong> au <strong>Aujourd'hui</strong>
+              Analyse du <strong>{new Date(stats.date_debut_effective).toLocaleDateString()}</strong> au <strong>{stats.date_fin_effective ? new Date(stats.date_fin_effective).toLocaleDateString() : "Aujourd'hui"}</strong>
             </div>
           )}
         </div>
@@ -277,11 +290,12 @@ export default function Duplicates() {
           <div className="field">
             <label className="field-label">Source des données</label>
             <select className="field-control" value={source} onChange={(e) => setSource(e.target.value)}>
+              <option value="all">Tous (OCC + MMG)</option>
               <option value="occ">OCC (Détail CDR)</option>
               <option value="mmg">MMG (SMS/Signaling)</option>
             </select>
           </div>
-          {source === 'occ' && (
+          {['all', 'occ'].includes(source) && (
             <div className="field">
               <label className="field-label">Type d'appel</label>
               <select className="field-control" value={callType} onChange={(e) => setCallType(e.target.value)}>
@@ -323,35 +337,36 @@ export default function Duplicates() {
         <div className="panel" style={{ padding: 0, borderRadius: '16px', overflow: 'hidden' }}>
           <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(var(--primary-rgb), 0.03)' }}>
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Groupes de Doublons Détectés ({results.length})</h3>
-            {source === 'occ' && results.length > 0 && (
+            {['all', 'occ'].includes(source) && results.some(r => r._source === 'occ') && (
               <button 
                 className="btn" 
                 style={{ background: '#ef4444', color: 'white', fontSize: '0.8rem', padding: '6px 12px' }}
                 onClick={handleDeleteAll}
               >
                 <Icons.Trash2 size={14} style={{ marginRight: '6px' }} />
-                Supprimer tous les doublons
+                Supprimer tous les doublons OCC
               </button>
             )}
           </div>
           <div className="table-wrap" style={{ maxHeight: '600px', overflow: 'auto' }}>
-            <table className="table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="table-dense" style={{ minWidth: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
               <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-panel)', zIndex: 10 }}>
                 <tr>
                   <th style={{ width: '40px' }}></th>
+                  <th>Source</th>
                   <th>MSISDN</th>
                   <th>Service</th>
                   <th>Date & Heure</th>
-                  {source === 'occ' && <th>Montant</th>}
+                  {['all', 'occ'].includes(source) && <th>Montant</th>}
                   <th>Occurrences</th>
-                  {source === 'occ' && <th>Impact DT</th>}
+                  {['all', 'occ'].includes(source) && <th>Impact DT</th>}
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {results.length === 0 ? (
                   <tr>
-                    <td colSpan={source === 'occ' ? 8 : 6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                    <td colSpan={['all', 'occ'].includes(source) ? 9 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                       {loading ? 'Recherche des anomalies...' : 'Aucun doublon détecté avec ces critères.'}
                     </td>
                   </tr>
@@ -363,6 +378,19 @@ export default function Duplicates() {
                           <button onClick={() => toggleRow(idx)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                             {expandedRows.has(idx) ? <Icons.ChevronUp size={16} /> : <Icons.ChevronDown size={16} />}
                           </button>
+                        </td>
+                        <td>
+                          <span style={{ 
+                            fontSize: '10px', 
+                            padding: '2px 6px', 
+                            borderRadius: '4px', 
+                            background: row._source === 'occ' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                            color: row._source === 'occ' ? '#3b82f6' : '#10b981',
+                            fontWeight: 700,
+                            textTransform: 'uppercase'
+                          }}>
+                            {row._source}
+                          </span>
                         </td>
                         <td className="mono" style={{ fontWeight: 600 }}>{row.a_msisdn}</td>
                         <td>
@@ -376,7 +404,7 @@ export default function Duplicates() {
                           </div>
                         </td>
                         <td>{row.start_date} <span style={{ color: 'var(--text-muted)' }}>{row.start_hour}h</span></td>
-                        {source === 'occ' && <td>{formatDT(row.charge_amount)}</td>}
+                        {['all', 'occ'].includes(source) && <td>{row._source === 'occ' ? formatDT(row.charge_amount) : '—'}</td>}
                         <td>
                           <span style={{ 
                             color: row.occurrences >= 5 ? '#ef4444' : (row.occurrences >= 3 ? '#f59e0b' : 'inherit'),
@@ -385,24 +413,26 @@ export default function Duplicates() {
                             {row.occurrences}x
                           </span>
                         </td>
-                        {source === 'occ' && (
-                          <td style={{ color: '#ef4444', fontWeight: 600 }}>
-                            -{formatDT(row.revenu_a_corriger)}
+                        {['all', 'occ'].includes(source) && (
+                          <td style={{ color: row._source === 'occ' ? '#ef4444' : 'inherit', fontWeight: row._source === 'occ' ? 600 : 'normal' }}>
+                            {row._source === 'occ' ? `-${formatDT(row.revenu_a_corriger)}` : '—'}
                           </td>
                         )}
                         <td style={{ textAlign: 'right' }}>
-                          <button 
-                            className="btn btn-ghost" 
-                            style={{ color: '#ef4444', padding: '4px 8px' }}
-                            onClick={() => handleDelete(row.ids)}
-                          >
-                            <Icons.Trash2 size={14} />
-                          </button>
+                          {row._source === 'occ' && (
+                            <button 
+                              className="btn btn-ghost" 
+                              style={{ color: '#ef4444', padding: '4px 8px' }}
+                              onClick={() => handleDelete(row.ids)}
+                            >
+                              <Icons.Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                       {expandedRows.has(idx) && (
                         <tr style={{ background: 'rgba(var(--primary-rgb), 0.02)' }}>
-                          <td colSpan={source === 'occ' ? 8 : 6} style={{ padding: '1rem 3rem' }}>
+                          <td colSpan={['all', 'occ'].includes(source) ? 9 : 7} style={{ padding: '1rem 3rem' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
                               {row.ids.map(id => (
                                 <div key={id} style={{ fontSize: '0.75rem', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', display: 'flex', justifyContent: 'space-between' }}>
