@@ -190,7 +190,7 @@ export default function Revenus() {
       </div>
       <div className="toolbar">
         <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Période :</span>
-        {[7, 30, 90].map((value) => (
+        {[7, 30, 90, 365].map((value) => (
           <button
             type="button"
             key={value}

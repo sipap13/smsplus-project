@@ -89,42 +89,42 @@ body {
 
 :is(html, body).theme-dark {
   color-scheme: dark;
-  /* Premium Dark Mode (OLED-friendly & Slate) */
-  --bg-page: #09090b; /* Zinc 950 */
-  --bg-elevated: #18181b; /* Zinc 900 */
-  --bg-surface: #27272a; /* Zinc 800 */
-  --bg-surface-hover: #3f3f46; /* Zinc 700 */
+  /* Enhanced Dark Mode (High Contrast & Slate) */
+  --bg-page: #0f172a; /* Slate 900 */
+  --bg-elevated: #1e293b; /* Slate 800 */
+  --bg-surface: #334155; /* Slate 700 */
+  --bg-surface-hover: #475569; /* Slate 600 */
 
-  --text-main: #fafafa; /* Zinc 50 */
-  --text-muted: #a1a1aa; /* Zinc 400 */
-  --text-subtle: #71717a; /* Zinc 500 */
+  --text-main: #f8fafc; /* Slate 50 */
+  --text-muted: #cbd5e1; /* Slate 300 */
+  --text-subtle: #94a3b8; /* Slate 400 */
   --text-heading: #ffffff;
 
   --primary: #818cf8; /* Indigo 400 */
   --primary-2: #6366f1; /* Indigo 500 */
-  --primary-soft: rgba(99, 102, 241, 0.15);
+  --primary-soft: rgba(99, 102, 241, 0.2);
 
   --warning: #fbbf24;
   --danger: #f87171;
   --success: #34d399;
 
-  --border: #27272a; /* Zinc 800 */
+  --border: #334155; /* Slate 700 */
   
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --ring: rgba(129, 140, 248, 0.3);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --ring: rgba(129, 140, 248, 0.4);
 
-  --table-head-bg: #18181b;
-  --table-row-alt: #09090b;
-  --chip-bg: rgba(129, 140, 248, 0.15);
-  --chip-text: #a5b4fc;
-  --toolbar-bg: rgba(24, 24, 27, 0.85);
+  --table-head-bg: #1e293b;
+  --table-row-alt: #0f172a;
+  --chip-bg: rgba(129, 140, 248, 0.2);
+  --chip-text: #c7d2fe;
+  --toolbar-bg: rgba(30, 41, 59, 0.85);
   --toolbar-border: var(--border);
 
   /* Premium Glassmorphism Dark */
-  --glass-bg: rgba(24, 24, 27, 0.65);
-  --glass-border: rgba(255, 255, 255, 0.05);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  --glass-bg: rgba(30, 41, 59, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
   --glass-blur: 20px;
 }
 

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { downloadExcel } from '../api/excelDownload';
 import Modal from '../components/Modal';
+import { formatCompactNumber, formatDT } from '../lib/format';
 
 const TYPE_OPTIONS = ['Service', 'jeu'];
 
@@ -390,15 +391,17 @@ export default function Services() {
           <table className="table-mobile table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Service', 'Fournisseur', 'Keyword', 'Prix', 'Activité 30j', 'Alertes', 'Statut', 'Actions'].map((h) => (
+                {['Service', 'Fournisseur & Num.', 'Tarification', 'Trafic (30j)', 'Santé & Alertes', 'Actions'].map((h) => (
                   <th
                     key={h}
                     style={{
                       padding: '1rem',
-                      textAlign: 'left',
-                      fontSize: '0.85rem',
+                      textAlign: h === 'Actions' ? 'right' : 'left',
+                      fontSize: '0.80rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
                       color: 'var(--text-muted)',
-                      fontWeight: 600,
+                      fontWeight: 700,
                       borderBottom: '2px solid var(--border)',
                       whiteSpace: 'nowrap',
                     }}
@@ -414,94 +417,78 @@ export default function Services() {
                 const hasAlerts = (s.nb_alertes_ouvertes || 0) > 0;
 
                 return (
-                  <tr key={s.id} style={{ background: hasAlerts ? 'rgba(254, 242, 242, 0.3)' : 'transparent' }}>
-                    <td data-label="Service" style={{ padding: '0.875rem 1rem' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{s.nom_service}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{s.type_service} · {s.numero_court}</div>
+                  <tr key={s.id} style={{ background: hasAlerts ? 'rgba(254, 242, 242, 0.3)' : 'transparent', transition: 'background 0.2s' }}>
+                    <td data-label="Service" style={{ padding: '1rem', verticalAlign: 'top' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, color: s.actif ? 'var(--text-main)' : 'var(--text-muted)', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {s.nom_service}
+                            {!s.actif && <span style={{ fontSize: '9px', background: '#f87171', color: 'white', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>Inactif</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                            {s.keywords.map((kw, idx) => (
+                               <span key={idx} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>{kw}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                    <td data-label="Fournisseur" style={{ padding: '0.875rem 1rem', color: 'var(--text-main)' }}>
-                      {s.nom_fournisseur}
+                    <td data-label="Fournisseur" style={{ padding: '1rem', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem' }}>{s.nom_fournisseur}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                         <span style={{opacity: 0.7}}>📞</span> {s.numero_court}
+                      </div>
                     </td>
-                    <td data-label="Keyword" style={{ padding: '0.875rem 1rem' }}>
-                      <span className="chip">{s.keyword}</span>
+                    <td data-label="Tarification" style={{ padding: '1rem', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.95rem' }}>{prixLabel} <span style={{fontSize:'12px', fontWeight:600, color:'var(--text-muted)'}}>DT</span></div>
+                      <div style={{ fontSize: '11px', color: 'var(--success)', marginTop: '4px', fontWeight: 600 }}>Par transaction</div>
                     </td>
-                    <td data-label="Prix" style={{ padding: '0.875rem 1rem', fontWeight: 600, color: 'var(--success)' }}>
-                      {prixLabel} DT
-                    </td>
-                    <td data-label="Activité 30j" style={{ padding: '0.875rem 1rem' }}>
+                    <td data-label="Trafic" style={{ padding: '1rem', verticalAlign: 'top' }}>
                       {s.nb_cdr_30j > 0 ? (
                         <>
-                          <div style={{ fontWeight: 600, fontSize: '13px' }}>{Number(s.nb_cdr_30j).toLocaleString('fr-FR')} CDR</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            {Number(s.revenus_30j).toFixed(3)} DT · {s.nb_abonnes_30j} abonnés
+                          <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '0.95rem' }}>{formatCompactNumber(s.nb_cdr_30j)} <span style={{fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)'}}>CDR</span></div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 500 }}>
+                            {formatDT(s.revenus_30j)} DT
                           </div>
                         </>
                       ) : (
-                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>Inactif</span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: '6px', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '11px', fontWeight: 600 }}>
+                          <span style={{ fontSize: '12px', opacity: 0.6 }}>⊘</span> (vide)
+                        </div>
                       )}
                     </td>
-                    <td data-label="Alertes" style={{ padding: '0.875rem 1rem', minWidth: '220px' }}>
+                    <td data-label="Santé" style={{ padding: '1rem', verticalAlign: 'top' }}>
                       {hasAlerts ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                           <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: s.urgence_alerte === 'critique' ? 'rgba(220, 38, 38, 0.15)' : s.urgence_alerte === 'haute' ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-surface)',
-                            color: s.urgence_alerte === 'critique' ? 'var(--danger)' : s.urgence_alerte === 'haute' ? 'var(--warning)' : 'var(--text-muted)',
-                            border: '1px solid',
-                            borderColor: s.urgence_alerte === 'critique' ? '#fecaca' : s.urgence_alerte === 'haute' ? '#fde68a' : '#fed7aa',
-                            borderRadius: '999px',
-                            padding: '2px 10px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            width: 'fit-content',
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            background: s.urgence_alerte === 'critique' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            color: s.urgence_alerte === 'critique' ? 'var(--danger)' : 'var(--warning)',
+                            border: '1px solid', borderColor: s.urgence_alerte === 'critique' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                            borderRadius: '6px', padding: '3px 10px', fontSize: '11px', fontWeight: 700,
                           }}>
-                            ⚠ {s.nb_alertes_ouvertes} alerte{s.nb_alertes_ouvertes > 1 ? 's' : ''} · {s.urgence_alerte.toUpperCase()}
+                            <span style={{ fontSize: '14px' }}>⚠️</span> {s.nb_alertes_ouvertes} alerte{s.nb_alertes_ouvertes > 1 ? 's' : ''}
                           </span>
-                          <div style={{ fontSize: '11px', color: '#64748b' }}>
-                            {Number(s.total_sms_suspects).toLocaleString('fr-FR')} SMS suspects
-                            {s.ratio_suspects_pct > 0 && (
-                              <span style={{ color: '#dc2626', fontWeight: 600 }}> ({s.ratio_suspects_pct}%)</span>
-                            )}
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', fontWeight: 500 }}>
+                            {formatCompactNumber(s.total_sms_suspects)} SMS bloqués
                           </div>
-                          <div style={{ fontSize: '10px', color: '#94a3b8' }}>Seuil max : {s.seuil_max}%</div>
-                          <div style={{ fontSize: '10px', color: '#94a3b8' }}>Depuis : {new Date(s.derniere_alerte).toLocaleDateString('fr-FR')}</div>
-                          <button
-                            onClick={() => navigate(`/alerts?keyword=${s.keyword}`)}
-                            style={{
-                              background: 'var(--bg-elevated)',
-                              border: '1px solid var(--border)',
-                              borderRadius: '4px',
-                              padding: '3px 8px',
-                              fontSize: '11px',
-                              color: 'var(--primary)',
-                              cursor: 'pointer',
-                              marginTop: '4px',
-                              width: 'fit-content',
-                              fontWeight: 500
-                            }}
-                          >
-                            Voir les alertes →
-                          </button>
                         </div>
                       ) : (
-                        <span style={{ color: '#16a34a', fontSize: '12px', fontWeight: 500 }}>✓ Aucune alerte</span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--success)', fontSize: '11px', fontWeight: 600, background: 'rgba(16, 185, 129, 0.1)', padding: '3px 10px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                          <span style={{ fontSize: '12px' }}>✓</span> Sain
+                        </div>
                       )}
                     </td>
-                    <td data-label="Statut" style={{ padding: '0.875rem 1rem' }}>
-                      <span className={`badge ${s.actif ? 'badge-ok' : 'badge-danger'}`}>
-                        {s.actif ? 'Actif' : 'Inactif'}
-                      </span>
-                    </td>
-                    <td data-label="Actions" style={{ padding: '0.875rem 1rem', whiteSpace: 'nowrap', minWidth: '150px' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button type="button" onClick={() => openEdit(s)} className="btn btn-soft btn-pill">
-                          Détails
-                        </button>
-                        <button type="button" onClick={() => del(s.id)} className="btn btn-ghost btn-pill" style={{ color: 'var(--danger)' }}>
-                          Suppr.
-                        </button>
+                    <td data-label="Actions" style={{ padding: '1rem', verticalAlign: 'top', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', flexDirection: 'column', alignItems: 'flex-end' }}>
+                         <button type="button" onClick={() => openEdit(s)} className="btn btn-soft" style={{ height: '30px', padding: '0 14px', fontSize: '11px', fontWeight: 600, borderRadius: '6px' }}>
+                           Détails
+                         </button>
+                         {hasAlerts && (
+                            <button onClick={() => navigate(`/alerts?keyword=${s.keywords[0]}`)} className="btn btn-soft" style={{ height: '30px', padding: '0 14px', fontSize: '11px', fontWeight: 700, color: 'var(--danger)', background: 'rgba(239,68,68,0.1)', border: 'none', borderRadius: '6px' }}>
+                              Voir alertes →
+                            </button>
+                         )}
                       </div>
                     </td>
                   </tr>

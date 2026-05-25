@@ -31,6 +31,3 @@ Remarques utiles
 Fichier important à committer
 - Le fichier `.env.example` est sûr à committer : il contient des valeurs d'exemple et des instructions. Ne commitez jamais un fichier `.env` contenant des secrets réels.
 
-Si vous voulez, je peux :
-- Créer un commit Git incluant `.env.example` et `DB_SETUP.md`.
-- Préparer un message prêt à envoyer à votre encadrant reprenant ces éléments.

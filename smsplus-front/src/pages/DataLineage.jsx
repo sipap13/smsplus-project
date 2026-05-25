@@ -6,7 +6,7 @@ const STAGES = [
     id: 'source', step: '1', title: 'Sources CDR', badge: 'SOURCE',
     color: '#1e3a5f', gradient: 'linear-gradient(135deg, #1e3a5f, #0f2744)',
     desc: 'Fichiers CSV/XLS issus des switchs réseau OCC et MMG.',
-    tables: [{ key: 'Fichier .csv (OCC)' }, { key: 'Fichier .xls (MMG)' }],
+    tables: [{ label: 'Fichier .csv (OCC)', key: 'ra_t_tmp_occ' }, { label: 'Fichier .xls (MMG)', key: 'ra_t_tmp_mmg' }],
     ops: ['Lecture séquentielle', 'Validation format', 'Détection encodage UTF-8/Latin'],
     techDetails: 'Import via ProcessImportJob (Laravel Queue). Parsing avec PhpSpreadsheet pour XLS et fgetcsv pour CSV.',
   },
@@ -178,7 +178,7 @@ export default function DataLineage() {
                         <div key={t.key}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', marginBottom: '2px' }}>
                             <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
-                              {t.key}
+                              {t.label || t.key}
                             </span>
                             <span style={{ color: stage.color, fontWeight: 700, fontFamily: 'monospace', fontSize: '0.65rem' }}>
                               {fmt(count)}
@@ -240,7 +240,7 @@ export default function DataLineage() {
                       background: 'var(--bg-elevated)', marginBottom: '6px',
                       border: '1px solid var(--border)',
                     }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-main)' }}>{t.key}</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-main)' }}>{t.label || t.key}</span>
                       <span style={{
                         background: `${s.color}15`, color: s.color,
                         padding: '2px 10px', borderRadius: '8px',

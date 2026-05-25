@@ -361,7 +361,29 @@ const RevenusChart = ({ startDate, endDate }) => {
           style={{ height: '32px', borderRadius: '6px', border: '1px solid var(--border)', padding: '0 8px', fontSize: '13px', background: 'var(--bg-surface)', color: 'var(--text-main)', marginRight: '8px' }}
         >
           <option value="all">Tous les services</option>
-          {[...new Map(filteredServices.map(s => [s.nom_service, s])).values()].map(s => <option key={s.nom_service} value={s.nom_service}>{s.nom_service}</option>)}
+          {(() => {
+            const uniqueServices = [...new Map(filteredServices.map(s => [s.nom_service, s])).values()].map(s => ({
+              ...s,
+              has_traffic_global: filteredServices.some(fs => fs.nom_service === s.nom_service && fs.has_traffic)
+            }));
+            
+            uniqueServices.sort((a, b) => {
+              if (a.has_traffic_global === b.has_traffic_global) {
+                return a.nom_service.localeCompare(b.nom_service);
+              }
+              return a.has_traffic_global ? -1 : 1;
+            });
+
+            return uniqueServices.map(s => (
+              <option 
+                key={s.nom_service} 
+                value={s.nom_service}
+                style={{ color: !s.has_traffic_global ? 'var(--danger)' : 'inherit' }}
+              >
+                {s.has_traffic_global ? s.nom_service : `🔴 ${s.nom_service} (vide)`}
+              </option>
+            ));
+          })()}
         </select>
         <select 
           className="select-sm" 
@@ -384,15 +406,7 @@ const RevenusChart = ({ startDate, endDate }) => {
 
       <div style={{ width: '100%', height: 350 }}>
           <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
-          <AreaChart key={`${granularite}-${service}`} data={data}>
-            <defs>
-              {colors.map((c, i) => (
-                <linearGradient key={i} id={`color-${i}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={c} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={c} stopOpacity={0}/>
-                </linearGradient>
-              ))}
-            </defs>
+          <BarChart key={`${granularite}-${service}`} data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} minTickGap={30} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatDT} />
@@ -417,40 +431,34 @@ const RevenusChart = ({ startDate, endDate }) => {
                 return null;
               }}
             />
-            <Legend />
+            <Legend wrapperStyle={{ fontSize: '12px' }} />
             
             {service === 'all' ? (
-              Object.keys(data[0] || {}).filter(k => !['date', 'label', 'total', 'is_outlier', 'z_score', 'valeur_capped'].includes(k)).map((k, i) => (
-                <Area 
+              Object.keys(data[0] || {}).filter(k => !['date', 'label', 'full_label', 'total', 'is_outlier', 'z_score', 'valeur_capped'].includes(k)).map((k, i) => (
+                <Bar 
                   key={k} 
-                  type="monotone" 
-                  dataKey={k === 'total' ? 'valeur_capped' : k} 
-                  name={k === 'total' ? 'Revenus total' : k}
-                  stackId="1" 
-                  stroke={colors[i % colors.length]} 
-                  fill={`url(#color-${i % colors.length})`} 
+                  dataKey={k} 
+                  name={k}
+                  stackId="a" 
+                  fill={colors[i % colors.length]} 
+                  radius={i === Object.keys(data[0] || {}).filter(k => !['date', 'label', 'full_label', 'total', 'is_outlier', 'z_score', 'valeur_capped'].includes(k)).length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
                 />
               ))
             ) : (
-              <Area 
-                type="monotone" 
-                dataKey="valeur_capped" 
+              <Bar 
+                dataKey="revenus" 
                 name="Revenus"
-                stroke="#3b6fa0" 
-                fill="url(#color-0)" 
-                strokeWidth={3}
-                dot={(props) => {
-                  const { cx, cy, payload } = props;
-                  if (payload.is_outlier) {
-                    return <circle cx={cx} cy={cy} r={6} fill="#5ba3d9" stroke="#fff" strokeWidth={2} />;
-                  }
-                  return <circle cx={cx} cy={cy} r={4} fill="#3b6fa0" />;
-                }}
-                activeDot={{ r: 6 }}
-              />
+                fill="#3b6fa0" 
+                radius={[4, 4, 0, 0]}
+                maxBarSize={50}
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : '#3b6fa0'} />
+                ))}
+              </Bar>
             )}
             <Brush dataKey="label" height={30} stroke="var(--border)" fill="var(--bg-surface)" />
-          </AreaChart>
+          </BarChart>
 
         </ResponsiveContainer>
       </div>
@@ -498,7 +506,7 @@ const TopServices = ({ startDate, endDate }) => {
           const medals = ['🥇', '🥈', '🥉'];
           
           return (
-            <div key={s.keyword} className="surface" style={{ padding: '16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+            <div key={`${s.keyword}-${i}`} className="surface" style={{ padding: '16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '1.2rem' }}>{i < 3 ? medals[i] : `#${s.rank}`}</span>
@@ -675,7 +683,7 @@ const BillingIntegrity = ({ startDate, endDate }) => {
             </thead>
             <tbody>
                {data.map((d, i) => (
-                 <tr key={d.keyword} style={{ borderBottom: i < data.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                 <tr key={`${d.keyword}-${i}`} style={{ borderBottom: i < data.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <td style={{ padding: '8px 4px' }}>
                        <div style={{ fontWeight: 600 }}>{d.nom_service}</div>
                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{d.nb_cdr} CDR · {d.prix_theorique} DT</div>

@@ -37,7 +37,7 @@ const getJobLabel = (jobName) => {
   return jobName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
-const COLORS = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9', '#7ab8e0', '#9ecae1'];
+const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9', '#14b8a6'];
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -91,7 +91,16 @@ export default function EtlPerformance() {
 
       if (perfRes.status === 'fulfilled') {
         const formatted = {};
+        const ignoredJobs = [
+          'msisdn_search_occ', 
+          'msisdn_search_mmg', 
+          'msisdn_timeline_build', 
+          'msisdn_reclamations_search'
+        ];
+        
         for (const [jobName, jobs] of Object.entries(perfRes.value.data)) {
+          if (ignoredJobs.includes(jobName)) continue;
+          
           formatted[jobName] = jobs.map(j => ({
             ...j,
             label: format(new Date(j.date), 'dd/MM HH:mm', { locale: fr }),
@@ -106,7 +115,17 @@ export default function EtlPerformance() {
       }
 
       if (jobsRes.status === 'fulfilled') {
-        setRecentJobs(jobsRes.value.data?.data || jobsRes.value.data || []);
+        const jobs = jobsRes.value.data?.data || jobsRes.value.data || [];
+        const uniqueJobs = [];
+        const seen = new Set();
+        for (const job of jobs) {
+          const name = job.job_name || job.type || '';
+          if (!seen.has(name)) {
+            seen.add(name);
+            uniqueJobs.push(job);
+          }
+        }
+        setRecentJobs(uniqueJobs);
       }
     } catch (err) {
       console.error(err);

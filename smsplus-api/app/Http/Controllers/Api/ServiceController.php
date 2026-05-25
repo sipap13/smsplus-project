@@ -16,6 +16,9 @@ class ServiceController extends Controller
     ) {}
     public function index(Request $request)
     {
+        $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date') ?: now()->toDateString();
+        $startDate = date('Y-m-d', strtotime($maxDate . ' -30 days'));
+
         $services = DB::table('ra_t_services as s')
             ->leftJoin('ra_t_alerts as a', function($join) {
                 $join->on('a.keyword', '=', 's.keyword')
@@ -23,7 +26,7 @@ class ServiceController extends Controller
                      ->where('a.start_date', '>=', now()->subDays(30)->toDateString());
             })
             ->leftJoin(
-                DB::raw('(
+                DB::raw("(
                     SELECT
                         keyword,
                         COUNT(*) as nb_cdr_total,
@@ -31,10 +34,10 @@ class ServiceController extends Controller
                         COUNT(DISTINCT a_msisdn) as nb_abonnes,
                         MAX(start_date) as derniere_activite
                     FROM ra_t_occ_cdr_detail
-                    WHERE call_type = \'VAS\'
-                        AND start_date >= NOW() - INTERVAL \'30 days\'
+                    WHERE call_type = 'VAS'
+                        AND start_date >= '{$startDate}'
                     GROUP BY keyword
-                ) occ_stats'),
+                ) occ_stats"),
                 'occ_stats.keyword',
                 's.keyword'
             )
@@ -343,6 +346,8 @@ class ServiceController extends Controller
 
     public function mapping()
     {
+        $activeKeywords = DB::table('ra_t_occ_cdr_detail')->select('keyword')->distinct()->pluck('keyword');
+
         $services = DB::table('ra_t_services')
             ->where('actif', true)
             ->orderBy('nom_service')
@@ -353,6 +358,7 @@ class ServiceController extends Controller
                 'nom_fournisseur' => $s->nom_fournisseur,
                 'nom_complet'     => $s->nom_service . ' (' . $s->keyword . ')',
                 'label'           => $s->nom_service . ' — ' . $s->nom_fournisseur,
+                'has_traffic'     => $activeKeywords->contains($s->keyword),
             ])
             ->values();
 
