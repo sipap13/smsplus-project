@@ -54,7 +54,7 @@ class EtlMonitorServiceTest extends TestCase
     public function testNormalizeRowCounts_defaults_processed_rows_to_1_for_system_command_report_when_missing(): void
     {
         $job = new \App\Models\EtlJob();
-        $job->category = 'command';
+        $job->job_type = 'command';
 
         $normalized = $this->service->normalizeRowCounts([], $job);
 
