@@ -50,6 +50,8 @@ export default function MsisdnSearch() {
   const [timelineData, setTimelineData] = useState(null);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
+  const [cdrError, setCdrError]       = useState(false);
+  const [recError, setRecError]       = useState(false);
   const [activeTab, setActiveTab]     = useState('occ');
 
   const { getNom } = useServiceMapping();
@@ -62,7 +64,7 @@ export default function MsisdnSearch() {
   const search = async (overrideQ) => {
     const q = (overrideQ || msisdn).trim();
     if (!q) { setError('Veuillez saisir un numéro MSISDN'); return; }
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setCdrError(false); setRecError(false);
     setReclamations(null); setCdr(null); setTimelineData(null);
     const enc = encodeURIComponent(q);
     try {
@@ -71,15 +73,27 @@ export default function MsisdnSearch() {
         api.get(`/cdr/msisdn/${enc}`),
         api.get(`/cdr/msisdn/${enc}/timeline`),
       ]);
-      if (recRes.status === 'fulfilled') setReclamations(recRes.value.data); else setReclamations([]);
+      if (recRes.status === 'fulfilled') {
+        setReclamations(recRes.value.data);
+      } else {
+        setReclamations([]);
+        setRecError(true);
+      }
       if (tlRes.status  === 'fulfilled') setTimelineData(tlRes.value.data);
-      if (cdrRes.status === 'fulfilled') setCdr(cdrRes.value.data);
-      else if (recRes.status === 'rejected') setError('Erreur lors de la recherche');
+      if (cdrRes.status === 'fulfilled') {
+        setCdr(cdrRes.value.data);
+      } else {
+        setCdrError(true);
+      }
+      // Si aucun appel n'a réussi du tout
+      if (recRes.status === 'rejected' && cdrRes.status === 'rejected' && tlRes.status === 'rejected') {
+        setError('Erreur lors de la recherche — tous les services sont indisponibles');
+      }
     } catch { setError('Erreur lors de la recherche'); }
     finally { setLoading(false); }
   };
 
-  const hasResults = cdr || reclamations !== null;
+  const hasResults = cdr || reclamations !== null || timelineData;
 
   const thStyle = {
     padding: '0.6rem 0.75rem', textAlign: 'left',
@@ -189,24 +203,71 @@ export default function MsisdnSearch() {
 
       {hasResults && (
         <>
+          {/* Bandeau d'erreur partielle */}
+          {(cdrError || recError) && (
+            <div style={{
+              display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '0.75rem 0',
+              padding: '0.6rem 1rem', borderRadius: '10px',
+              background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+              fontSize: '0.82rem', color: '#b45309', fontWeight: 500, alignItems: 'center'
+            }}>
+              <span style={{ fontSize: '1rem' }}>⚠</span>
+              {cdrError && <span>L'appel CDR a échoué (timeout ou erreur serveur).</span>}
+              {recError && <span>L'appel réclamations a échoué.</span>}
+              <span style={{ color: '#92400e' }}>Les données partielles sont affichées ci-dessous.</span>
+            </div>
+          )}
+
           {/* Stats strip */}
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', margin: '1.25rem 0' }}>
-            <StatChip label="CDR OCC" value={(cdr?.occ_total ?? 0).toLocaleString('fr-FR')} color="#6366f1" />
-            <StatChip label="CDR MMG" value={(cdr?.mmg_total ?? 0).toLocaleString('fr-FR')} color="#8b5cf6" />
-            <StatChip 
-              label="Score Risque IA" 
-              value={cdr?.risk_analysis ? `${cdr.risk_analysis.score}/100` : '—'} 
-              color={cdr?.risk_analysis?.level === 'CRITICAL' ? '#ef4444' : (cdr?.risk_analysis?.level === 'WARNING' ? '#f59e0b' : '#10b981')} 
+            <StatChip
+              label="CDR OCC"
+              value={cdr ? cdr.occ_total.toLocaleString('fr-FR') : (cdrError ? '⚠ Erreur' : '0')}
+              color={cdrError && !cdr ? '#f59e0b' : '#6366f1'}
             />
-            <StatChip label="Réclamations" value={reclamations?.length ?? 0} color={reclamations?.length > 0 ? '#ef4444' : '#10b981'} />
-            
-            {cdr?.risk_analysis?.reasons?.length > 0 && (
-              <div style={{ 
-                fontSize: '0.75rem', background: 'rgba(99,102,241,0.05)', border: '1px dashed #6366f1', 
+            <StatChip
+              label="CDR MMG"
+              value={cdr ? cdr.mmg_total.toLocaleString('fr-FR') : (cdrError ? '⚠ Erreur' : '0')}
+              color={cdrError && !cdr ? '#f59e0b' : '#8b5cf6'}
+            />
+            <StatChip
+              label="Score Risque IA"
+              value={
+                cdr?.risk_analysis?._ok === true
+                  ? `${cdr.risk_analysis.score}/100`
+                  : cdr?.risk_analysis?._ok === false
+                    ? '⚠ Indisponible'
+                    : (cdrError ? '⚠ Erreur' : '—')
+              }
+              color={
+                cdr?.risk_analysis?._ok === true
+                  ? (cdr.risk_analysis.level === 'CRITICAL' ? '#ef4444' : (cdr.risk_analysis.level === 'WARNING' ? '#f59e0b' : '#10b981'))
+                  : '#94a3b8'
+              }
+            />
+            <StatChip
+              label="Réclamations"
+              value={recError ? '⚠ Erreur' : (reclamations?.length ?? 0)}
+              color={recError ? '#f59e0b' : (reclamations?.length > 0 ? '#ef4444' : '#10b981')}
+            />
+
+            {cdr?.risk_analysis?._ok === true && cdr.risk_analysis.reasons?.length > 0 && (
+              <div style={{
+                fontSize: '0.75rem', background: 'rgba(99,102,241,0.05)', border: '1px dashed #6366f1',
                 borderRadius: '8px', padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '8px'
               }}>
                 <span style={{ fontWeight: 700, color: '#6366f1' }}>Analyse IA :</span>
                 <span style={{ color: 'var(--text-muted)' }}>{cdr.risk_analysis.reasons.join(' · ')}</span>
+              </div>
+            )}
+
+            {cdr?.risk_analysis?._ok === false && (
+              <div style={{
+                fontSize: '0.75rem', background: 'rgba(239,68,68,0.05)', border: '1px dashed #ef4444',
+                borderRadius: '8px', padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontWeight: 700, color: '#ef4444' }}>Score IA :</span>
+                <span style={{ color: 'var(--text-muted)' }}>{cdr.risk_analysis._error || 'Calcul indisponible'}</span>
               </div>
             )}
 

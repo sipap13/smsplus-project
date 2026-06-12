@@ -70,6 +70,10 @@ class ChatbotService
 
     protected function generateSqlQuery(string $question, string $userRole): string
     {
+        if ($this->isMultiDayActivityQuestion($question)) {
+            return $this->buildMultiDayActivitySql($userRole);
+        }
+
         $prompt = $this->buildSqlPrompt($userRole);
 
         $aiResponse = $this->aiProvider->complete($prompt, $question, 400, 0);
@@ -77,6 +81,50 @@ class ChatbotService
         $sql = $this->normalizeSql($sql, $userRole);
 
         return $this->cleanSql($sql);
+    }
+
+    protected function isMultiDayActivityQuestion(string $question): bool
+    {
+        $normalized = mb_strtolower($question);
+
+        return (bool) preg_match('/plus\s+actif|plus\s+actifs|plus\s+active|plus\s+actives/', $normalized)
+            && (bool) preg_match('/jour|jours|journ[eé]e|diff[eé]rent/', $normalized);
+    }
+
+    protected function buildMultiDayActivitySql(string $userRole): string
+    {
+        if ($userRole === 'ANALYSTE_BUSS') {
+            return <<<SQL
+SELECT
+    a_msisdn,
+    COUNT(DISTINCT start_date::date) AS nb_jours_actifs,
+    COUNT(*) AS nb_transactions,
+    MAX(start_date::date) AS derniere_activite
+FROM ra_t_occ_cdr_detail
+WHERE datasource IS NULL OR datasource <> 'OCC_AGG'
+GROUP BY a_msisdn
+ORDER BY nb_jours_actifs DESC, nb_transactions DESC, a_msisdn ASC
+LIMIT 10
+SQL;
+        }
+
+        return <<<SQL
+SELECT
+    a_msisdn,
+    COUNT(DISTINCT start_date::date) AS nb_jours_actifs,
+    COUNT(*) AS nb_transactions,
+    MAX(start_date::date) AS derniere_activite
+FROM (
+    SELECT a_msisdn, start_date
+    FROM ra_t_occ_cdr_detail
+    WHERE datasource IS NULL OR datasource <> 'OCC_AGG'
+    UNION ALL
+    SELECT a_msisdn, start_date FROM ra_t_mmg_cdr_det
+) AS cdrs
+GROUP BY a_msisdn
+ORDER BY nb_jours_actifs DESC, nb_transactions DESC, a_msisdn ASC
+LIMIT 10
+SQL;
     }
 
     /**
@@ -90,14 +138,14 @@ class ChatbotService
      */
     protected function normalizeSql(string $sql, string $userRole): string
     {
-        // ── 1. Corriger les alias de montant OCC (tous roles) ─────────────────
+        // Fix OCC amount aliases for all roles.
         $sql = str_ireplace(
             ['chrg_amount', 'chg_amount', 'charge_amt'],
             'charge_amount',
             $sql
         );
 
-        // ── 2. Acces OCC uniquement (ANALYSTE_BUSS) ───────────────────────────
+        // Restrict MMG access for ANALYSTE_BUSS.
         if ($userRole === 'ANALYSTE_BUSS') {
             if (preg_match('/\bra_t_mmg_cdr_det\b/i', $sql)) {
                 throw new \RuntimeException(
@@ -110,7 +158,7 @@ class ChatbotService
             return $sql;
         }
 
-        // ── 3. Corrections qualifiees OCC ────────────────────────────────────
+        // Normalize OCC-specific column references.
         $sql = preg_replace(
             '/\bra_t_occ_cdr_detail\s*\.\s*service_type\b/i',
             'ra_t_occ_cdr_detail.keyword',
@@ -122,14 +170,14 @@ class ChatbotService
             $sql
         );
 
-        // ── 4. Corrections qualifiees MMG ────────────────────────────────────
+        // Normalize MMG-specific column references.
         $sql = preg_replace(
             '/\bra_t_mmg_cdr_det\s*\.\s*service(?!_type)(?![a-zA-Z0-9_])/i',
             'ra_t_mmg_cdr_det.service_type',
             $sql
         );
 
-        // ── 5. Detecter un JOIN illegal entre OCC et MMG ──────────────────────
+        // Reject illegal joins between OCC and MMG tables.
         $hasOcc = (bool) preg_match('/\bra_t_occ_cdr_detail\b/i', $sql);
         $hasMmg = (bool) preg_match('/\bra_t_mmg_cdr_det\b/i', $sql);
 
@@ -143,7 +191,7 @@ class ChatbotService
             }
         }
 
-        // ── 6. Colonnes OCC-only utilisees sur MMG ────────────────────────────
+        // Reject OCC-only columns when the query targets MMG.
         $occOnlyColumns = ['charge_amount', 'keyword', 'roaming_type', 'partner', 'datasource'];
         foreach ($occOnlyColumns as $col) {
             if (preg_match('/\bra_t_mmg_cdr_det\s*\.\s*'.$col.'\b/i', $sql)) {
@@ -154,7 +202,7 @@ class ChatbotService
             }
         }
 
-        // ── 7. Colonnes MMG-only utilisees sur OCC ────────────────────────────
+        // Reject MMG-only columns when the query targets OCC.
         $mmgOnlyColumns = ['ne', 'event_type_orig', 'event_status', 'service_type'];
         foreach ($mmgOnlyColumns as $col) {
             if (preg_match('/\bra_t_occ_cdr_detail\s*\.\s*'.$col.'\b/i', $sql)) {
@@ -165,13 +213,13 @@ class ChatbotService
             }
         }
 
-        // ── 8. References non qualifiees quand seule OCC est presente ─────────
+        // Normalize service references when only OCC is present.
         if ($hasOcc && ! $hasMmg) {
             $sql = preg_replace('/\bservice_type\b/i', 'keyword', $sql);
             $sql = preg_replace('/(?<![_a-zA-Z0-9])service(?![_a-zA-Z0-9])/i', 'keyword', $sql);
         }
 
-        // ── 9. charge_amount non qualifie dans une requete MMG seule ──────────
+        // Reject charge_amount in MMG-only queries.
         if ($hasMmg && ! $hasOcc) {
             if (preg_match('/\bcharge_amount\b/i', $sql)) {
                 throw new \RuntimeException(
@@ -304,7 +352,7 @@ class ChatbotService
         $prompt .= "CONSEIL DE RÉPONSE : Si tes résultats SQL sont limités par un LIMIT ou un TOP, ne dis pas à l'utilisateur que c'est 'le seul' résultat disponible. Dis plutôt que c'est le premier ou le plus important.\n";
         $prompt .= 'REGLES ABSOLUES sur les colonnes — respecte-les strictement ou la requete sera en erreur : ';
 
-        // ── Table OCC (schema exact) ───────────────────────────────────────────
+        // Table OCC schema details.
         $prompt .= '[TABLE ra_t_occ_cdr_detail] ';
         $prompt .= 'Colonnes exactes : id, datasource, a_msisdn, b_msisdn, start_date, start_hour, call_type, event_type, subscriber_type, roaming_type, partner, charge_amount, keyword, orig_start_time, created_at, updated_at. ';
         $prompt .= 'charge_amount EXISTE dans OCC et represente le montant facture. ';
@@ -316,7 +364,7 @@ class ChatbotService
             $prompt .= "[POUR RÉFÉRENCE UNIQUEMENT] Valeurs réelles de keyword dans OCC : $list. ";
         }
 
-        // ── Table MMG (schema exact) ───────────────────────────────────────────
+        // Table MMG schema details.
         $prompt .= '[TABLE ra_t_mmg_cdr_det] ';
         $prompt .= 'Colonnes exactes : id, ne, a_msisdn, b_msisdn, start_date, start_hour, event_type, event_type_orig, call_type, event_status, subscriber_type, service_type, orig_start_time, created_at, updated_at. ';
         $prompt .= 'ATTENTION CRITIQUE : charge_amount N\'EXISTE PAS dans MMG. N\'utilise JAMAIS charge_amount avec ra_t_mmg_cdr_det. ';
@@ -328,18 +376,18 @@ class ChatbotService
             $prompt .= "[POUR RÉFÉRENCE UNIQUEMENT] Valeurs réelles de service_type dans MMG : $list. ";
         }
 
-        // ── Montants ───────────────────────────────────────────────────────────
+        // Revenue and amount rules.
         $prompt .= 'Pour les revenus/montants : utilise UNIQUEMENT ra_t_occ_cdr_detail.charge_amount (OCC seulement). ';
         $prompt .= 'Pour les volumes MMG : utilise COUNT(*) ou COUNT(b_msisdn), JAMAIS charge_amount. ';
         $prompt .= 'Beaucoup de lignes OCC ont charge_amount NULL ou keyword vide — filtre avec IS NOT NULL si pertinent. ';
 
-        // ── Interdiction JOIN et guide comparaison ─────────────────────────────
+        // Join restrictions and comparison guidance.
         $prompt .= 'INTERDIT ABSOLU : ne fais jamais un JOIN ou INNER JOIN entre ra_t_occ_cdr_detail et ra_t_mmg_cdr_det. ';
         $prompt .= 'Ces deux tables sont independantes et ne partagent pas de cle commune fiable. ';
         $prompt .= 'Pour comparer OCC et MMG, utilise DEUX sous-requetes SELECT independantes dans un UNION ALL ou dans un SELECT englobant. ';
         $prompt .= "Exemple de comparaison correcte : SELECT 'OCC' AS source, COUNT(*) AS nb FROM ra_t_occ_cdr_detail UNION ALL SELECT 'MMG' AS source, COUNT(*) AS nb FROM ra_t_mmg_cdr_det. ";
 
-        // ── Droits par role ───────────────────────────────────────────────────
+        // Role-based access rules.
         if ($userRole === 'ANALYSTE_OP') {
             $prompt .= "L'utilisateur a acces aux deux tables OCC et MMG. ";
         } elseif ($userRole === 'ANALYSTE_BUSS') {

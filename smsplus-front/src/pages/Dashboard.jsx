@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { formatCompactNumber, formatDT } from '../lib/format';
 import { usePeriode } from '../hooks/usePeriode';
+import useLocalState from '../hooks/useLocalState';
 import { format, parseISO, differenceInDays, subDays } from 'date-fns';
 import { PieChart, Pie, Cell as PieCell } from 'recharts';
 import useServiceMapping from '../hooks/useServiceMapping';
@@ -131,8 +132,8 @@ const GlobalPeriodControls = ({ periode, setPreset, setCustom }) => {
 const TrafficChart = ({ startDate, endDate, label }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [granularity, setGranularity] = useState('week');
-  const [options, setOptions] = useState({ mmg: true, occ: true, ecart: false, moyenne: true });
+  const [granularity, setGranularity] = useLocalState('trafic_granularity', 'week');
+  const [options, setOptions] = useLocalState('trafic_options', { mmg: true, occ: true, ecart: false, moyenne: true });
 
   const fetchData = async () => {
     setLoading(true);
@@ -167,55 +168,93 @@ const TrafficChart = ({ startDate, endDate, label }) => {
     [data]
   );
 
-  const stats = useMemo(() => {
-    if (data.length === 0) return null;
-    const totalMmg = data.reduce((acc, d) => acc + d.mmg, 0);
-    const totalOcc = data.reduce((acc, d) => acc + d.occ, 0);
-    const avgEcart = data.reduce((acc, d) => acc + d.ecart_pct, 0) / data.length;
-    const pic = [...data].sort((a, b) => b.occ - a.occ)[0];
-    const meanOcc = totalOcc / data.length;
-    return { totalMmg, totalOcc, avgEcart, pic, meanOcc };
-  }, [data]);
+  const comparisonFactor = useMemo(() => {
+    if (!normalizedData.length) return 1;
+    const totalMmg = normalizedData.reduce((acc, d) => acc + (Number(d.mmg) || 0), 0);
+    const totalOcc = normalizedData.reduce((acc, d) => acc + (Number(d.occ) || 0), 0);
+    return totalMmg > 0 ? totalOcc / totalMmg : 1;
+  }, [normalizedData]);
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const d = payload[0].payload;
-      return (
-        <div style={{
-          background: '#0f172a',
-          color: '#f1f5f9',
-          borderRadius: '8px',
-          padding: '10px 14px',
-          fontSize: '12px',
-          lineHeight: '1.8',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
-          border: '1px solid #1e293b'
-        }}>
-          <div style={{ fontWeight: 700, marginBottom: '6px' }}>📅 {d.full_label || d.label}</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
-            <span style={{ color: '#94a3b8' }}>MMG :</span>
-            <span style={{ fontWeight: 700 }}>{formatCompactNumber(d.mmg)} CDR</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
-            <span style={{ color: '#94a3b8' }}>OCC :</span>
-            <span style={{ fontWeight: 700, color: '#6366f1' }}>{formatCompactNumber(d.occ)} CDR</span>
-          </div>
+  const comparisonData = useMemo(() => {
+    return normalizedData.map(d => {
+      const mmgAdjusted = (Number(d.mmg) || 0) * comparisonFactor;
+      const ecartAdjustedPct = d.occ > 0 ? Math.abs(mmgAdjusted - d.occ) / d.occ * 100 : 0;
+      return {
+        ...d,
+        mmg_adjusted: mmgAdjusted,
+        ecart_adjusted_pct: ecartAdjustedPct,
+      };
+    });
+  }, [normalizedData, comparisonFactor]);
+
+  const stats = useMemo(() => {
+    if (!comparisonData.length) return null;
+    const totalMmg = comparisonData.reduce((acc, d) => acc + d.mmg_adjusted, 0);
+    const totalOcc = comparisonData.reduce((acc, d) => acc + d.occ, 0);
+    const avgEcart = comparisonData.reduce((acc, d) => acc + d.ecart_adjusted_pct, 0) / comparisonData.length;
+    const pic = [...comparisonData].sort((a, b) => b.occ - a.occ)[0];
+    const meanOcc = totalOcc / comparisonData.length;
+    return { totalMmg, totalOcc, avgEcart, pic, meanOcc };
+  }, [comparisonData]);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || !payload.length) return null;
+
+    const payloadByName = payload.reduce((acc, item) => {
+      acc[item.name] = item;
+      return acc;
+    }, {});
+
+    const mmgItem = payloadByName['MMG'];
+    const occItem = payloadByName['OCC'];
+    const mmgValue = mmgItem?.value ?? null;
+    const occValue = occItem?.value ?? null;
+    const ecartPct = mmgValue !== null && occValue !== null && occValue > 0
+      ? Math.abs(mmgValue - occValue) / occValue * 100
+      : null;
+
+    const sourceRow = payload[0]?.payload || {};
+
+    return (
+      <div style={{
+        background: '#0f172a',
+        color: '#f1f5f9',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        fontSize: '12px',
+        lineHeight: '1.8',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+        border: '1px solid #1e293b'
+      }}>
+        <div style={{ fontWeight: 700, marginBottom: '6px' }}>📅 {sourceRow.full_label || label || sourceRow.label}</div>
+        {payload
+          .filter(item => item?.name)
+          .map(item => {
+            // override the dark bar color so text is visible in the dark tooltip
+            const textColor = item.name === 'MMG' ? '#60a5fa' : item.color;
+            return (
+              <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
+                <span style={{ color: '#94a3b8' }}>{item.name} :</span>
+                <span style={{ fontWeight: 700, color: textColor }}>{formatCompactNumber(item.value)} CDR</span>
+              </div>
+            );
+          })}
+        {ecartPct !== null && (
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', borderTop: '1px solid #1e293b', paddingTop: '4px', marginTop: '4px' }}>
             <span style={{ color: '#94a3b8' }}>Écart :</span>
-            <span style={{ fontWeight: 700, color: d.ecart_pct > 5 ? '#ef4444' : '#10b981' }}>
-              {d.ecart_pct > 5 ? '⚠' : '✓'} {d.ecart_pct}%
+            <span style={{ fontWeight: 700, color: ecartPct > 5 ? '#ef4444' : '#10b981' }}>
+              {ecartPct > 5 ? '⚠' : '✓'} {ecartPct.toFixed(1)}%
             </span>
           </div>
-        </div>
-      );
-    }
-    return null;
+        )}
+      </div>
+    );
   };
 
 
   return (
     <div className="glass-card surface-pad" style={{ marginBottom: '1.2rem', position: 'relative' }}>
-      <CardHeader title="Trafic MMG vs OCC" subtitle={`Volume CDR · ${label}`}>
+      <CardHeader title="Trafic MMG vs OCC" subtitle={`Volume CDR · ${label} · MMG ajusté x${comparisonFactor.toFixed(2)}`}>
         <select 
           className="select-sm" 
           value={granularity} 
@@ -254,14 +293,14 @@ const TrafficChart = ({ startDate, endDate, label }) => {
 
       <div style={{ width: '100%', height: 350 }}>
           <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
-          <ComposedChart key={granularity} data={normalizedData}>
+          <ComposedChart key={granularity} data={comparisonData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={30} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactNumber} />
             <Tooltip content={<CustomTooltip />} />
             <Legend verticalAlign="top" align="right" height={36} />
             
-            {options.mmg && <Bar dataKey="mmg" name="MMG" fill="#0f2744" radius={[4, 4, 0, 0]} maxBarSize={30} />}
+            {options.mmg && <Bar dataKey="mmg_adjusted" name="MMG" fill="#0f2744" radius={[4, 4, 0, 0]} maxBarSize={30} />}
             {options.occ && (
               <Bar dataKey="occ" name="OCC" fill="#3b6fa0" radius={[4, 4, 0, 0]} maxBarSize={30} />
             )}
@@ -289,9 +328,10 @@ const TrafficChart = ({ startDate, endDate, label }) => {
 const RevenusChart = ({ startDate, endDate }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [service, setService] = useState('all');
-  const [fournisseur, setFournisseur] = useState('all');
-  const [granularite, setGranularity] = useState('week');
+  const [service, setService] = useLocalState('revenus_service_v2', 'all');
+  const [fournisseur, setFournisseur] = useLocalState('revenus_fournisseur_v2', '');
+  const [granularite, setGranularity] = useLocalState('revenus_granularite_v2', 'week');
+  const [showAllServices, setShowAllServices] = useLocalState('revenus_showAllServices', false);
   
   const { services: mappedServices } = useServiceMapping();
 
@@ -299,8 +339,17 @@ const RevenusChart = ({ startDate, endDate }) => {
     return [...new Set(mappedServices.map(s => s.nom_fournisseur).filter(Boolean))].sort();
   }, [mappedServices]);
 
+  useEffect(() => {
+    if (fournisseurs && fournisseurs.length) {
+      // If saved fournisseur is not empty but not present in the current list, default to empty
+      if (fournisseur && !fournisseurs.includes(fournisseur)) {
+        setFournisseur('');
+      }
+    }
+  }, [fournisseurs, fournisseur]);
+
   const filteredServices = useMemo(() => {
-    return fournisseur === 'all' ? mappedServices : mappedServices.filter(s => s.nom_fournisseur === fournisseur);
+    return fournisseur ? mappedServices.filter(s => s.nom_fournisseur === fournisseur) : mappedServices;
   }, [mappedServices, fournisseur]);
 
   const fetchData = async () => {
@@ -308,7 +357,7 @@ const RevenusChart = ({ startDate, endDate }) => {
     try {
       let url = `/dashboard/revenus-par-service?start_date=${startDate}&end_date=${endDate}&granularite=${granularite}`;
       if (service !== 'all') url += `&nom_service=${encodeURIComponent(service)}`;
-      if (fournisseur !== 'all') url += `&fournisseur=${encodeURIComponent(fournisseur)}`;
+      if (fournisseur) url += `&fournisseur=${encodeURIComponent(fournisseur)}`;
       const res = await api.get(url);
       setData(res.data);
     } catch (err) {
@@ -342,6 +391,18 @@ const RevenusChart = ({ startDate, endDate }) => {
   // Dynamic colors for services
   const colors = ['#0f2744', '#1e3a5f', '#2a5082', '#3b6fa0', '#4a8ec2', '#5ba3d9', '#7ab8e0'];
 
+  // compute visible service keys (top-N) when showing aggregated multiple services
+  const { availableServiceKeys, visibleServiceKeys } = useMemo(() => {
+    if (!data || !data.length) return { availableServiceKeys: [], visibleServiceKeys: [] };
+    const excluded = ['date', 'label', 'full_label', 'total', 'is_outlier', 'z_score', 'valeur_capped'];
+    const available = [...new Set(data.flatMap(d => Object.keys(d)))].filter(k => !excluded.includes(k));
+    const totals = available.map(k => ({ k, sum: data.reduce((s, r) => s + Number(r[k] || 0), 0) }));
+    totals.sort((a, b) => b.sum - a.sum);
+    const topN = 10;
+    const visible = showAllServices ? available : totals.slice(0, topN).map(t => t.k);
+    return { availableServiceKeys: available, visibleServiceKeys: visible };
+  }, [data, showAllServices]);
+
   return (
     <div className="surface surface-pad" style={{ marginBottom: '1.2rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <CardHeader title="Revenus par service" subtitle={`Analyse des revenus (DT) · ${startDate} au ${endDate}`}>
@@ -351,9 +412,17 @@ const RevenusChart = ({ startDate, endDate }) => {
           onChange={e => { setFournisseur(e.target.value); setService('all'); }}
           style={{ height: '32px', borderRadius: '6px', border: '1px solid var(--border)', padding: '0 8px', fontSize: '13px', background: 'var(--bg-surface)', color: 'var(--text-main)', marginRight: '8px' }}
         >
-          <option value="all">Tous les fournisseurs</option>
+          <option value="">Tous les fournisseurs</option>
           {fournisseurs.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
+        <button
+          type="button"
+          className="btn btn-soft"
+          onClick={() => setShowAllServices(s => !s)}
+          style={{ height: '32px', padding: '0 8px', marginRight: '8px' }}
+        >
+          {showAllServices ? 'Top 10' : 'Afficher tous'}
+        </button>
         <select 
           className="select-sm" 
           value={service} 
@@ -405,62 +474,70 @@ const RevenusChart = ({ startDate, endDate }) => {
       </div>
 
       <div style={{ width: '100%', height: 350 }}>
-          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
-          <BarChart key={`${granularite}-${service}`} data={data}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} minTickGap={30} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatDT} />
-            <Tooltip 
-               content={({ active, payload, label }) => {
-                if (active && payload && payload.length) {
-                  const d = payload[0].payload;
-                  return (
-                    <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b' }}>
-                      <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {d.full_label || label}</div>
-                      {d.is_outlier && <div style={{ color: '#fbbf24', fontSize: '11px', marginBottom: '4px' }}>⚠ Valeur exceptionnelle (z-score = {d.z_score})</div>}
-                      {payload.map((p, i) => (
-                        <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
-                          <span>{p.name}:</span>
-                          <span style={{ fontWeight: 700 }}>{formatDT(p.value)}</span>
+          {data && data.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
+              <BarChart key={`${granularite}-${service}`} data={data}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} minTickGap={30} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={formatDT} />
+                <Tooltip 
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const d = payload[0].payload;
+                      return (
+                        <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: d.is_outlier ? '1px solid #f59e0b' : '1px solid #1e293b' }}>
+                          <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 {d.full_label || label}</div>
+                          {d.is_outlier && <div style={{ color: '#fbbf24', fontSize: '11px', marginBottom: '4px' }}>⚠ Valeur exceptionnelle (z-score = {d.z_score})</div>}
+                          {payload.map((p, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', alignItems: 'center', marginBottom: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ width: 8, height: 8, borderRadius: 2, background: p.color }} />
+                                <span style={{ color: '#94a3b8' }}>{p.name}:</span>
+                              </div>
+                              <span style={{ fontWeight: 700, color: '#f1f5f9' }}>{formatDT(p.value)}</span>
+                            </div>
+                          ))}
+                          {d.is_outlier && <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>Plafonné à : {formatDT(d.valeur_capped)}</div>}
                         </div>
-                      ))}
-                      {d.is_outlier && <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '4px' }}>Plafonné à : {formatDT(d.valeur_capped)}</div>}
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: '12px' }} />
-            
-            {service === 'all' ? (
-              Object.keys(data[0] || {}).filter(k => !['date', 'label', 'full_label', 'total', 'is_outlier', 'z_score', 'valeur_capped'].includes(k)).map((k, i) => (
-                <Bar 
-                  key={k} 
-                  dataKey={k} 
-                  name={k}
-                  stackId="a" 
-                  fill={colors[i % colors.length]} 
-                  radius={i === Object.keys(data[0] || {}).filter(k => !['date', 'label', 'full_label', 'total', 'is_outlier', 'z_score', 'valeur_capped'].includes(k)).length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                      );
+                    }
+                    return null;
+                  }}
                 />
-              ))
-            ) : (
-              <Bar 
-                dataKey="revenus" 
-                name="Revenus"
-                fill="#3b6fa0" 
-                radius={[4, 4, 0, 0]}
-                maxBarSize={50}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : '#3b6fa0'} />
-                ))}
-              </Bar>
-            )}
-            <Brush dataKey="label" height={30} stroke="var(--border)" fill="var(--bg-surface)" />
-          </BarChart>
-
-        </ResponsiveContainer>
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                
+                {service === 'all' ? (
+                  (visibleServiceKeys || []).map((k, i) => (
+                    <Bar 
+                      key={k} 
+                      dataKey={k} 
+                      name={k}
+                      stackId="a" 
+                      fill={colors[i % colors.length]} 
+                      radius={i === (visibleServiceKeys || []).length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                    />
+                  ))
+                ) : (
+                  <Bar 
+                    dataKey="revenus" 
+                    name="Revenus"
+                    fill="#3b6fa0" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={50}
+                  >
+                    {data.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.is_outlier ? '#f59e0b' : '#3b6fa0'} />
+                    ))}
+                  </Bar>
+                )}
+                <Brush dataKey="label" height={30} stroke="var(--border)" fill="var(--bg-surface)" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+              {!loading && "Aucune donnée disponible pour les filtres sélectionnés."}
+            </div>
+          )}
       </div>
     </div>
   );
@@ -547,25 +624,77 @@ const MmgSuccessCard = ({ startDate, endDate }) => {
   }, [startDate, endDate]);
 
   const stats = useMemo(() => {
-    const success = data.find(d => d.event_status === 'Success')?.nb || 0;
-    const total = data.reduce((acc, d) => acc + d.nb, 0);
-    const rate = total > 0 ? (success / total * 100).toFixed(1) : 100;
-    return { success, total, rate };
+    const total = data.reduce((acc, d) => acc + (d.nb || 0), 0);
+    const breakdown = data.reduce((acc, d) => {
+      const key = (d.event_status || 'unknown').toString().trim().toLowerCase();
+      const norm = (k => {
+        if (k === 'success' || k === 'ok' || k === 'completed') return 'success';
+        if (k === 'failed' || k === 'failure' || k === 'error' || k === 'failed_attempt') return 'failed';
+        if (k === 'pending' || k === 'queued' || k === 'in_progress') return 'pending';
+        return k;
+      })(key);
+      acc[norm] = (acc[norm] || 0) + (d.nb || 0);
+      return acc;
+    }, {});
+
+    const success = breakdown.success || 0;
+    const failed = breakdown.failed || 0;
+    const pending = breakdown.pending || 0;
+    const others = Object.keys(breakdown).filter(k => !['success','failed','pending'].includes(k)).reduce((s,k) => s + breakdown[k], 0);
+    const rate = total > 0 ? Number(((success / total) * 100).toFixed(1)) : 0;
+    return { total, success, failed, pending, others, breakdown, rate };
   }, [data]);
+
+  // Colors for breakdown
+  const COLORS = { success: '#10b981', failed: '#ef4444', pending: '#f59e0b', others: '#64748b' };
 
   return (
     <div className="glass-card surface-pad">
       <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Taux de succès MMG</h3>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', margin: '15px 0' }}>
-        <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-main)' }}>{stats.rate}%</span>
-        <span style={{ color: 'var(--success)', fontWeight: 600 }}>{stats.success} OK</span>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', margin: '12px 0' }}>
+        <span style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-main)' }}>{stats.rate}%</span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{formatCompactNumber(stats.success)} OK</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatCompactNumber(stats.total)} total</div>
+        </div>
       </div>
-      <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-        <div style={{ width: `${stats.rate}%`, height: '100%', background: 'var(--success)' }} />
+
+      {/* Segmented bar */}
+      <div style={{ height: '14px', background: 'var(--border)', borderRadius: '8px', overflow: 'hidden', display: 'flex', marginBottom: '10px' }}>
+        {stats.total > 0 ? (
+          <>
+            <div style={{ width: `${(stats.success / stats.total) * 100}%`, background: COLORS.success }} />
+            <div style={{ width: `${(stats.failed / stats.total) * 100}%`, background: COLORS.failed }} />
+            <div style={{ width: `${(stats.pending / stats.total) * 100}%`, background: COLORS.pending }} />
+            <div style={{ width: `${(stats.others / stats.total) * 100}%`, background: COLORS.others }} />
+          </>
+        ) : (
+          <div style={{ width: '100%', background: 'var(--border)' }} />
+        )}
       </div>
-      <p style={{ margin: '10px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        Sur un total de {formatCompactNumber(stats.total)} CDR MMG traités.
+
+      {/* Breakdown list */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
+        {[['success','Succès', COLORS.success], ['failed','Échecs', COLORS.failed], ['pending','En attente', COLORS.pending], ['others','Autres', COLORS.others]].map(([k,label,color]) => {
+          const value = stats[k] || 0;
+          const pct = stats.total > 0 ? ((value / stats.total) * 100).toFixed(1) : '0.0';
+          return (
+            <div key={k} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: 10, height: 10, background: color, borderRadius: 3 }} />
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600 }}>{label}</div>
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>{formatCompactNumber(value)} · {pct}%</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        Période: {startDate} → {endDate} · Données agrégées par statut MMG.
       </p>
+
     </div>
   );
 };
@@ -580,6 +709,31 @@ const SubscriberDistribution = ({ startDate, endDate }) => {
       .catch(console.error);
   }, [startDate, endDate]);
 
+  // Normalize and group subscriber_type, and remove zero-values to avoid rendering invalid pie sectors
+  const displayData = useMemo(() => {
+    if (!Array.isArray(data) || data.length === 0) return [];
+    const mapKey = (k) => {
+      if (!k) return 'UNKNOWN';
+      const s = k.toString().trim().toLowerCase();
+      if (s.includes('pre')) return 'PREPAID';
+      if (s.includes('hyb') || s.includes('hybrid')) return 'HYB';
+      if (s.includes('post')) return 'POSTPAID';
+      return k.toString().toUpperCase();
+    };
+    const grouped = {};
+    data.forEach(d => {
+      const key = mapKey(d.subscriber_type);
+      if (!grouped[key]) grouped[key] = { subscriber_type: key, nb_abonnes: 0, revenus: 0, nb_cdr: 0 };
+      grouped[key].nb_abonnes += Number(d.nb_abonnes || d.nb || 0);
+      grouped[key].revenus += Number(d.revenus || d.revenue || 0);
+      grouped[key].nb_cdr += Number(d.nb_cdr || 0);
+    });
+    // filter out zero-values to avoid tiny/invalid sectors
+    return Object.values(grouped).filter(x => (x.nb_abonnes || 0) > 0);
+  }, [data]);
+
+  const COLOR_MAP = { PREPAID: '#1e3a5f', HYB: '#f59e0b', POSTPAID: '#3b6fa0', UNKNOWN: '#94a3b8' };
+
   return (
     <div className="glass-card surface-pad">
       <CardHeader title="Répartition par offre" subtitle="PREPAID vs HYBRID" />
@@ -587,32 +741,29 @@ const SubscriberDistribution = ({ startDate, endDate }) => {
           <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
           <PieChart>
             <Pie
-              data={data}
+              data={displayData}
               innerRadius={60}
               outerRadius={80}
               paddingAngle={5}
               dataKey="nb_abonnes"
               nameKey="subscriber_type"
+              isAnimationActive={false}
             >
-              {data.map((entry, index) => (
-                <PieCell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              {displayData.map((entry, index) => (
+                <PieCell key={`cell-${entry.subscriber_type}-${index}`} fill={COLOR_MAP[entry.subscriber_type] || COLORS[index % COLORS.length]} />
               ))}
             </Pie>
             <Tooltip 
+              formatter={(value, name) => {
+                if (name === 'nb_abonnes') return [formatCompactNumber(value) + ' abonnés', 'Abonnés'];
+                return [value, name];
+              }}
               contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} 
               itemStyle={{ fontSize: '13px' }}
             />
             <Legend verticalAlign="bottom" align="center" />
           </PieChart>
         </ResponsiveContainer>
-      </div>
-      <div style={{ marginTop: '10px' }}>
-         {data.map((d, i) => (
-           <div key={d.subscriber_type} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>{d.subscriber_type}</span>
-              <span style={{ fontWeight: 600 }}>{formatDT(d.revenus)}</span>
-           </div>
-         ))}
       </div>
     </div>
   );
@@ -724,24 +875,34 @@ export default function Dashboard({ user }) {
   
 
 
+  // Check server max available date only once at mount to avoid
+  // overriding user changes to the period after they interact.
   useEffect(() => {
     const checkRange = async () => {
       try {
         const res = await api.get('/dashboard/range');
         const maxDate = res.data.max_date;
-        if (maxDate && (new Date(periode.startDate) > new Date(maxDate))) {
-           const start = format(subDays(parseISO(maxDate), 7), 'yyyy-MM-dd');
-           setPeriode({
-             preset: 'custom',
-             startDate: start,
-             endDate: maxDate,
-             label: `Dernières données disponibles (${format(parseISO(maxDate), 'dd/MM/yyyy')})`
-           });
+        if (maxDate) {
+          const maxDateObj = parseISO(maxDate);
+          const desiredEnd = new Date(periode.endDate);
+          const desiredStart = new Date(periode.startDate);
+
+          if (desiredStart > maxDateObj || desiredEnd > maxDateObj) {
+             const end = maxDate;
+             const start = format(subDays(maxDateObj, 7), 'yyyy-MM-dd');
+             setPeriode({
+               preset: 'custom',
+               startDate: start,
+               endDate: end,
+               label: `Dernières données disponibles (${format(maxDateObj, 'dd/MM/yyyy')})`
+             });
+          }
         }
       } catch (err) { console.error(err); }
     };
     checkRange();
-  }, [periode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   return (

@@ -21,10 +21,20 @@ return new class extends Migration {
             $table->decimal('charge_amount', 10, 3)->default(0);
             $table->string('keyword', 20)->nullable();
             $table->string('orig_start_time', 30)->nullable();
+
+            // Clé métier pour l'idempotence lors des imports OCC.
+            // Utilisée aussi par ImportExcelData (upsert) pour dédupliquer les doublons.
+            $table->unique(
+                ['a_msisdn', 'b_msisdn', 'start_date', 'start_hour', 'call_type', 'event_type', 'orig_start_time'],
+                'ra_t_occ_cdr_detail_business_key_unique'
+            );
+
             $table->timestamps();
         });
     }
+
     public function down(): void {
         Schema::dropIfExists('ra_t_occ_cdr_detail');
     }
 };
+

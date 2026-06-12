@@ -57,3 +57,35 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Analyse des acteurs et impacts
+
+Cette section résume, par acteur, les actions principales du système VAS et les entités/modèles impactés dans le code (`Import`, `EtlJob`, `Cdr`, `Service`, `User`, `Reclamation`, `Notification`, `AuditLog`).
+
+- **Analyste Opérationnel**
+	- Actions : importer des CDRs, valider des imports, consulter le dashboard, filtrer et visualiser des statistiques.
+	- Modèles impactés : `Import`, `EtlJob`, `Cdr`, `Notification`.
+	- Champs modifiés : `Import.status`, `Import.imported_rows`, `Import.error_rows`, `EtlJob.status`, `EtlJob.rows_inserted`, `Cdr.*`.
+
+- **Analyste d'affaires**
+	- Actions : gérer et réconcilier des CDRs, détecter des anomalies, calculer les KPI VAS.
+	- Modèles impactés : `Cdr`, `EtlJob`, `Service`, `Reclamation`.
+	- Champs modifiés : `Cdr.event_status`, `Cdr.service_type`, flags de réconciliation, `Reclamation.statut`.
+
+- **Administrateur**
+	- Actions : gérer les utilisateurs, configurer les sources de données, déclencher ou relancer des imports/ETL, calculer des KPI.
+	- Modèles impactés : `User`, `Import`, `EtlJob`, `Service`.
+	- Champs modifiés : `User.*` (création/mise à jour), `Service.actif`, `Import.status`.
+
+- **Système MMG/OCC (acteur système)**
+	- Rôle : source automatisée de CDRs (push/export) déclenchant des imports.
+	- Modèles impactés : `Import`, `Cdr`, `EtlJob`.
+
+### Recommandations rapides
+
+- Centraliser l'audit des actions critiques via `AuditLog` (create/update/delete), idéalement avec des observers Eloquent pour les modèles `User`, `Import`, `EtlJob`, `Cdr`, `Service`, `Reclamation`.
+- Implémenter des policies/gates Laravel pour protéger les actions (AnalysteOp, AnalysteAffaires, Admin).
+- Prévoir versioning/historique pour la réconciliation (audit + snapshot des changements).
+- Si des KPI sont persistés, créer une table `kpi_values` ou stocker dans `EtlJob.metrics` selon besoins de requêtage.
+
+Si vous voulez, je peux générer automatiquement : stubs de `Policy`, des observers Eloquent pour `AuditLog`, ou des endpoints scaffold pour les cas d'utilisation principaux.

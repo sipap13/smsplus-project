@@ -21,9 +21,9 @@ export default function Alerts() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [usageHigh, setUsageHigh] = useState({ meta: null, items: [] });
-  const [usageSource, setUsageSource] = useState('occ_agg');
+  const [usageSource, setUsageSource] = useState('occ');
   const [usageMetric, setUsageMetric] = useState('traffic');
-  const [usageMinCount, setUsageMinCount] = useState(50);
+  const [usageMinCount, setUsageMinCount] = useState(5);
   const [usageThresholdPct, setUsageThresholdPct] = useState(20);
   const [usageLoading, setUsageLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -285,11 +285,13 @@ export default function Alerts() {
         <div className="command-bar" style={{ marginBottom: '0.85rem' }}>
           <div className="field">
             <div className="field-label">Source</div>
-            <select className="field-control" value={usageSource} onChange={(e) => setUsageSource(e.target.value)}>
-              <option value="occ_agg">OCC (AGG)</option>
-              <option value="mmg_agg">MMG (AGG)</option>
-              <option value="occ">OCC (détail)</option>
-              <option value="mmg">MMG (détail)</option>
+            <select className="field-control" value={usageSource} onChange={(e) => {
+              const val = e.target.value;
+              setUsageSource(val);
+              if (val !== 'occ') setUsageMetric('traffic');
+            }}>
+              <option value="occ">OCC</option>
+              <option value="mmg">MMG</option>
             </select>
           </div>
           <div className="field">
@@ -298,8 +300,8 @@ export default function Alerts() {
               className="field-control"
               value={usageMetric}
               onChange={(e) => setUsageMetric(e.target.value)}
-              disabled={usageSource !== 'occ_agg'}
-              title={usageSource !== 'occ_agg' ? 'Disponible uniquement pour OCC (AGG)' : ''}
+              disabled={usageSource !== 'occ'}
+              title={usageSource !== 'occ' ? 'Disponible uniquement pour OCC' : ''}
             >
               <option value="traffic">Trafic</option>
               <option value="revenue">Revenus</option>

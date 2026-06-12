@@ -1,11 +1,11 @@
 # Export Excel SMS+ VAS - Documentation des changements
 
-## 🎯 Fonctionnalité ajoutée
+## Fonctionnalité export Excel
 Système complet d'export Excel pour les données CDR OCC, CDR MMG, Services et Alertes avec filtres appliqués.
 
 ---
 
-## 📋 BACKEND (Laravel API)
+## Backend (Laravel API)
 
 ### 1. Nouvelles routes API (`routes/api.php`)
 ```
@@ -68,7 +68,7 @@ Colonnes exportées :
 
 ---
 
-## 🎨 FRONTEND (React)
+## Frontend (React)
 
 ### 1. Fonction utilitaire d'export (`src/api/excelDownload.js`)
 ```javascript
@@ -142,7 +142,7 @@ Icône: ⬇ (download) et 🔄 spinner (loading)
 
 ---
 
-## 🔧 Intégration avec système existant
+## Intégration avec le système existant
 
 ### Package utilisé
 ```
@@ -166,7 +166,7 @@ Utilise le middleware `auth.api` existant et les rôles (`role:ADMIN,ANALYSTE_OP
 
 ---
 
-## 📝 Tests manuels recommandés
+## Tests manuels recommandés
 
 ### 1. CDR OCC
 ```bash
@@ -203,29 +203,29 @@ GET http://localhost:8001/api/export/alerts
 
 ---
 
-## 📂 Fichiers modifiés
+## Fichiers modifiés
 
 ```
 Backend:
-├── routes/api.php (✏️ ajout 4 routes export)
-├── app/Http/Controllers/Api/ExportController.php (✏️ remplacé, 4 méthodes)
-├── app/Exports/CdrOccExport.php (✨ créé)
-├── app/Exports/CdrMmgExport.php (✨ créé)
-├── app/Exports/ServicesExport.php (✨ créé)
-└── app/Exports/AlertsExport.php (✨ créé)
+├── routes/api.php (ajout de 4 routes export)
+├── app/Http/Controllers/Api/ExportController.php (remplacement avec 4 méthodes)
+├── app/Exports/CdrOccExport.php (nouvelle classe)
+├── app/Exports/CdrMmgExport.php (nouvelle classe)
+├── app/Exports/ServicesExport.php (nouvelle classe)
+└── app/Exports/AlertsExport.php (nouvelle classe)
 
 Frontend:
-├── src/api/excelDownload.js (✨ créé, utilitaire)
-├── src/pages/CdrOcc.jsx (✏️ +export)
-├── src/pages/CdrMmg.jsx (✏️ +export)
-├── src/pages/Services.jsx (✏️ +export)
-├── src/pages/Alerts.jsx (✏️ +export)
-└── src/index.css (✏️ +animation spin)
+├── src/api/excelDownload.js (nouvel utilitaire)
+├── src/pages/CdrOcc.jsx (ajout de l’export)
+├── src/pages/CdrMmg.jsx (ajout de l’export)
+├── src/pages/Services.jsx (ajout de l’export)
+├── src/pages/Alerts.jsx (ajout de l’export)
+└── src/index.css (ajout de l’animation spin)
 ```
 
 ---
 
-## ✅ Checklist de déploiement
+## Checklist de déploiement
 
 - [x] Routes API configurées
 - [x] Contrôleur Excel implémenté
@@ -240,7 +240,7 @@ Frontend:
 
 ---
 
-## 🚀 Déploiement
+## Déploiement
 
 Pour déployer en production :
 

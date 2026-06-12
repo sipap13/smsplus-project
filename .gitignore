@@ -9,6 +9,13 @@ smsplus-api/.env
 # Fichiers temporaires
 *.tmp
 temp.sql
+*.log
+error.log
+cols.txt
+temp_import_log.txt
+
+# Exceptions: docs utiles
+!TODO.md
 
 # Scripts de génération / réparation (racine)
 /write_*.py

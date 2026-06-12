@@ -8,7 +8,7 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const JOB_LABELS = {
-  'etl_agg_from_raw':        'Agrégation CDR (OCC_AGG)',
+  'etl_agg_from_raw':        'Agrégation CDR',
   'etl_cdr_from_tmp':        'Traitement CDR (OCC_DETAIL)',
   'import_occ_csv':          'Import OCC (CSV)',
   'import_mmg_csv':          'Import MMG (CSV)',
@@ -116,16 +116,7 @@ export default function EtlPerformance() {
 
       if (jobsRes.status === 'fulfilled') {
         const jobs = jobsRes.value.data?.data || jobsRes.value.data || [];
-        const uniqueJobs = [];
-        const seen = new Set();
-        for (const job of jobs) {
-          const name = job.job_name || job.type || '';
-          if (!seen.has(name)) {
-            seen.add(name);
-            uniqueJobs.push(job);
-          }
-        }
-        setRecentJobs(uniqueJobs);
+        setRecentJobs(jobs);
       }
     } catch (err) {
       console.error(err);

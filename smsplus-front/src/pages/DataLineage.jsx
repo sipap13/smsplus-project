@@ -30,7 +30,7 @@ const STAGES = [
     id: 'analytics', step: '4', title: 'Agrégats Analytics', badge: 'BI',
     color: '#4a8ec2', gradient: 'linear-gradient(135deg, #4a8ec2, #3b6fa0)',
     desc: 'Résumés par heure/jour/service pour alimenter le dashboard en temps réel.',
-    tables: [{ key: 'ra_t_occ_agg' }, { key: 'ra_t_mmg_agg' }],
+    tables: [{ key: 'ra_t_mmg_agg' }, { key: 'ra_t_occ_agg' }],
     ops: ['GROUP BY heure/service', 'SUM revenus & COUNT CDR', 'Cache dashboard (10 min TTL)'],
     techDetails: 'Agrégation automatique via DashboardController. Cache Laravel avec invalidation sur nouvel import.',
   },
@@ -81,7 +81,7 @@ export default function DataLineage() {
   return (
     <div className="page" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
 
-      {/* ─── Header ─── */}
+      {/* Header */}
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
@@ -94,7 +94,7 @@ export default function DataLineage() {
         <div />
       </div>
 
-      {/* ─── KPI Cards ─── */}
+      {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '2rem' }}>
         {kpis.map(k => (
           <div key={k.label} style={{
@@ -118,7 +118,7 @@ export default function DataLineage() {
         ))}
       </div>
 
-      {/* ─── Pipeline Flow (horizontal) ─── */}
+      {/* Pipeline flow */}
       <div ref={flowRef} style={{
         background: 'var(--bg-elevated)', border: '1px solid var(--border)',
         borderRadius: '20px', padding: '2rem', marginBottom: '1.5rem',
@@ -218,7 +218,7 @@ export default function DataLineage() {
           })}
         </div>
 
-        {/* ─── Detail Panel ─── */}
+        {/* Detail panel */}
         {activeIdx !== null && (() => {
           const s = STAGES[activeIdx];
           return (
@@ -286,7 +286,7 @@ export default function DataLineage() {
         })()}
       </div>
 
-      {/* ─── Data Flow Sankey-like visualization ─── */}
+      {/* Data flow visualization */}
       <div style={{
         background: 'var(--bg-elevated)', border: '1px solid var(--border)',
         borderRadius: '20px', padding: '2rem', marginBottom: '1.5rem',
@@ -326,7 +326,7 @@ export default function DataLineage() {
         </div>
       </div>
 
-      {/* ─── Transformation Cards ─── */}
+      {/* Transformation cards */}
       <div style={{
         background: 'var(--bg-elevated)', border: '1px solid var(--border)',
         borderRadius: '20px', padding: '2rem',

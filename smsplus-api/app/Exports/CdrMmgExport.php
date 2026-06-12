@@ -41,7 +41,16 @@ class CdrMmgExport implements FromCollection, WithHeadings
         }
 
         if ($this->eventStatus) {
-            $query->where('event_status', '=', $this->eventStatus);
+            if (strcasecmp($this->eventStatus, 'Success') === 0) {
+                $query->whereRaw("LOWER(TRIM(COALESCE(event_status, ''))) = 'success'");
+            } elseif (strcasecmp($this->eventStatus, 'Failed') === 0) {
+                $query->where(function ($w) {
+                    $w->whereRaw("LOWER(TRIM(COALESCE(event_status, ''))) = 'failed'")
+                      ->orWhereRaw("LOWER(TRIM(COALESCE(event_status, ''))) LIKE '%fail%'");
+                });
+            } else {
+                $query->where('event_status', '=', $this->eventStatus);
+            }
         }
 
         if ($this->subscriberType) {

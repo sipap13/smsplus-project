@@ -45,11 +45,11 @@ class EtlMonitorController extends Controller
                     'job_type' => $job->job_type,
                     'status' => $job->status,
                     'duration_ms' => $job->duration_ms,
-                    'pourcentage' => $job->total_rows > 0 ? (int)round(($job->processed_rows / $job->total_rows) * 100) : 0,
-                    'lignes_traitees' => (int)($job->processed_rows ?? 0),
-                    'lignes_inserees' => (int)($job->processed_rows ?? 0),
-                    'lignes_ignorees' => (int)($job->error_rows ?? 0),
-                    'total_lignes' => (int)($job->total_rows ?? 0),
+                    'pourcentage' => $job->pourcentage,
+                    'lignes_traitees' => (int)($job->rows_processed ?? 0),
+                    'lignes_inserees' => (int)($job->rows_processed ?? 0),
+                    'lignes_ignorees' => (int)($job->rows_skipped ?? 0),
+                    'total_lignes' => (int)(($job->metadata['total_rows'] ?? $job->metadata['nb_lignes'] ?? 0)),
                     'main_metric' => $this->getMainMetric($job),
                     'error_message' => $job->error_message,
                     'metadata' => $job->metadata 
@@ -105,7 +105,7 @@ class EtlMonitorController extends Controller
                     job_name, 
                     date_trunc(\'hour\', started_at) as hour, 
                     AVG(duration_ms) as avg_duration, 
-                    SUM(COALESCE(total_rows, 0) + COALESCE(processed_rows, 0)) as volume_total,
+                    SUM(COALESCE(CAST(metadata->>\'total_rows\' AS INTEGER), 0) + COALESCE(rows_processed, 0)) as volume_total,
                     COUNT(*) as job_count
                 ')
                 ->groupBy('job_name', 'hour')
@@ -165,8 +165,9 @@ class EtlMonitorController extends Controller
                 'ra_t_tmp_mmg'       => \Illuminate\Support\Facades\DB::table('ra_t_tmp_mmg')->count(),
                 'ra_t_occ_cdr_detail'=> \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')->count(),
                 'ra_t_mmg_cdr_det'   => \Illuminate\Support\Facades\DB::table('ra_t_mmg_cdr_det')->count(),
-                'ra_t_occ_agg'       => \Illuminate\Support\Facades\DB::table('ra_t_occ_agg')->count(),
+
                 'ra_t_mmg_agg'       => \Illuminate\Support\Facades\DB::table('ra_t_mmg_agg')->count(),
+                'ra_t_occ_agg'       => \Illuminate\Support\Facades\DB::table('ra_t_occ_agg')->count(),
                 'ra_t_alerts'        => \Illuminate\Support\Facades\DB::table('ra_t_alerts')->count(),
                 'ra_t_services'      => \Illuminate\Support\Facades\DB::table('ra_t_services')->count(),
                 'ra_t_etl_jobs'      => \Illuminate\Support\Facades\DB::table('ra_t_etl_jobs')->count(),
@@ -190,7 +191,7 @@ class EtlMonitorController extends Controller
                     'running' => EtlJob::running()->count(),
                 ],
                 'by_category' => EtlJob::where('created_at', '>=', $today)
-                    ->selectRaw('COALESCE(category, job_name) as job_type, status, COUNT(*) as count')
+                    ->selectRaw('job_name as job_type, status, COUNT(*) as count')
                     ->groupBy('job_type', 'status')
                     ->get()
                     ->groupBy('job_type')
@@ -209,7 +210,7 @@ class EtlMonitorController extends Controller
                         return [
                             'id'            => $job->id,
                             'job_name'      => $job->job_name,
-                            'job_type'      => $job->category ?? $job->job_name,
+                            'job_type'      => $job->job_name,
                             'status'        => $job->status,
                             'main_metric'   => $this->getMainMetric($job),
                             'relative_time' => $this->getRelativeTime($job->finished_at ?? $job->started_at),
@@ -282,16 +283,16 @@ class EtlMonitorController extends Controller
         
         return match ($job->job_name) {
             'import_occ_csv', 'import_occ_xlsx', 'import_mmg_csv', 'import_mmg_xlsx' => 
-                sprintf("%d lignes insérées", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
+                sprintf("%d lignes insérées", $metadata['processed_rows'] ?? $job->rows_processed ?? 0),
             
             'cdr_occ_paginate', 'cdr_mmg_paginate' => 
-                sprintf("%d résultats", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
+                sprintf("%d résultats", $metadata['processed_rows'] ?? $job->rows_processed ?? 0),
             
             'export_occ_excel', 'export_mmg_excel', 'export_revenus_csv' => 
-                sprintf("%d lignes exportées", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
+                sprintf("%d lignes exportées", $metadata['processed_rows'] ?? $job->rows_processed ?? 0),
             
             'services_list_load' => 
-                sprintf("%d services", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
+                sprintf("%d services", $metadata['processed_rows'] ?? $job->rows_processed ?? 0),
             
             'user_login', 'user_2fa_verify' => 
                 sprintf("Connexion %s", $job->status === 'success' ? 'réussie' : 'échouée'),
@@ -300,13 +301,13 @@ class EtlMonitorController extends Controller
                 sprintf("Alerte %s", $job->status === 'success' ? 'traitée' : 'échouée'),
             
             'notifications_load' => 
-                sprintf("%d notifications", $metadata['processed_rows'] ?? $job->processed_rows ?? 0),
+                sprintf("%d notifications", $metadata['processed_rows'] ?? $job->rows_processed ?? 0),
             
             'msisdn_search_all', 'msisdn_timeline_build' => 
-                sprintf("%d résultats", ($metadata['occ_total'] ?? 0) + ($metadata['mmg_total'] ?? 0) ?: ($job->processed_rows ?? 0)),
+                sprintf("%d résultats", ($metadata['occ_total'] ?? 0) + ($metadata['mmg_total'] ?? 0) ?: ($job->rows_processed ?? 0)),
             
             default => 
-                sprintf("%d lignes traitées", $job->processed_rows ?? 0),
+                sprintf("%d lignes traitées", $job->rows_processed ?? 0),
         };
     }
 

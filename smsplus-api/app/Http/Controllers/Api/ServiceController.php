@@ -19,11 +19,65 @@ class ServiceController extends Controller
         $maxDate = DB::table('ra_t_occ_cdr_detail')->max('start_date') ?: now()->toDateString();
         $startDate = date('Y-m-d', strtotime($maxDate . ' -30 days'));
 
+        $activeKeywords = DB::table('ra_t_occ_cdr_detail')
+            ->where('call_type', 'VAS')
+            ->where(function ($q) {
+                $q->whereNull('datasource')
+                  ->orWhereNotIn('datasource', ['OCC_AGG', 'DB_OCC_AGG']);
+            })
+            ->where('keyword', '!=', 'Agrégat')
+            ->whereNotNull('keyword')
+            ->select('keyword')
+            ->distinct()
+            ->pluck('keyword');
+
+        $activeKeywords = $activeKeywords
+            ->merge(
+                DB::table('ra_t_occ_agg')
+                    ->where('call_type', 'VAS')
+                    ->where('keyword', '!=', 'Agrégat')
+                    ->whereNotNull('keyword')
+                    ->select('keyword')
+                    ->distinct()
+                    ->pluck('keyword')
+            )
+            ->map(fn ($keyword) => strtoupper(trim((string) $keyword)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $existingKeywords = DB::table('ra_t_services')
+            ->whereNotNull('keyword')
+            ->pluck('keyword')
+            ->map(fn ($keyword) => strtoupper(trim((string) $keyword)))
+            ->filter()
+            ->unique();
+
+        $missingKeywords = $activeKeywords->diff($existingKeywords)->values();
+
+        if ($missingKeywords->isNotEmpty()) {
+            $now = now();
+            $rows = $missingKeywords->map(function ($keyword) use ($now) {
+                return [
+                    'nom_fournisseur' => 'Autre',
+                    'nom_service' => $keyword,
+                    'numero_court' => '',
+                    'keyword' => $keyword,
+                    'type_service' => 'Service',
+                    'prix' => 0,
+                    'actif' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            })->all();
+
+            DB::table('ra_t_services')->insert($rows);
+        }
+
         $services = DB::table('ra_t_services as s')
             ->leftJoin('ra_t_alerts as a', function($join) {
                 $join->on('a.keyword', '=', 's.keyword')
-                     ->where('a.status', '=', false)
-                     ->where('a.start_date', '>=', now()->subDays(30)->toDateString());
+                     ->where('a.status', '=', false);
             })
             ->leftJoin(
                 DB::raw("(
@@ -35,7 +89,6 @@ class ServiceController extends Controller
                         MAX(start_date) as derniere_activite
                     FROM ra_t_occ_cdr_detail
                     WHERE call_type = 'VAS'
-                        AND start_date >= '{$startDate}'
                     GROUP BY keyword
                 ) occ_stats"),
                 'occ_stats.keyword',
@@ -44,7 +97,7 @@ class ServiceController extends Controller
             ->select([
                 's.*',
                 
-                // Stats CDR réelles
+                // Stats CDR réelles (Total)
                 DB::raw('COALESCE(occ_stats.nb_cdr_total, 0) as nb_cdr_30j'),
                 DB::raw('COALESCE(occ_stats.revenus_total, 0) as revenus_30j'),
                 DB::raw('COALESCE(occ_stats.nb_abonnes, 0) as nb_abonnes_30j'),
@@ -97,6 +150,27 @@ class ServiceController extends Controller
             ")
             ->get();
 
+        $services = $services->map(function ($service) {
+            if (stripos($service->nom_service, 'inconnu') !== false) {
+                $service->nom_service = 'Autre';
+            }
+            if (stripos($service->nom_fournisseur, 'inconnu') !== false) {
+                $service->nom_fournisseur = 'Autre';
+            }
+
+            $storedPrice = (float) ($service->prix ?? 0);
+            $nbCdr = (int) ($service->nb_cdr_30j ?? 0);
+            $revenus = (float) ($service->revenus_30j ?? 0);
+
+            $prixAffiche = $storedPrice > 0
+                ? round($storedPrice, 3)
+                : ($nbCdr > 0 && $revenus > 0 ? round($revenus / $nbCdr, 3) : null);
+
+            $service->prix_affiche = $prixAffiche;
+
+            return $service;
+        });
+
         return response()->json($services);
     }
 
@@ -124,6 +198,8 @@ class ServiceController extends Controller
             'prix'            => 'required|numeric|min:0',
             'actif'           => 'sometimes|boolean',
         ]);
+
+        $validated['keyword'] = strtoupper($validated['keyword']);
 
         $id = DB::table('ra_t_services')->insertGetId([
             'nom_fournisseur' => $validated['nom_fournisseur'],
@@ -205,6 +281,10 @@ class ServiceController extends Controller
 
         if ($request->has('actif')) {
             $payload['actif'] = $request->boolean('actif');
+        }
+
+        if (isset($payload['keyword'])) {
+            $payload['keyword'] = strtoupper($payload['keyword']);
         }
 
         if (count($payload) > 1) {
@@ -346,22 +426,50 @@ class ServiceController extends Controller
 
     public function mapping()
     {
-        $activeKeywords = DB::table('ra_t_occ_cdr_detail')->select('keyword')->distinct()->pluck('keyword');
+        // Collect ALL keywords with CDR traffic (no call_type filter, matching revenue chart scope)
+        $activeKeywords = DB::table('ra_t_occ_cdr_detail')
+            ->whereNotNull('keyword')
+            ->where('keyword', '!=', '')
+            ->where('keyword', '!=', 'Agrégat')
+            ->where(function ($q) {
+                $q->whereNull('datasource')
+                  ->orWhereNotIn('datasource', ['OCC_AGG', 'DB_OCC_AGG']);
+            })
+            ->select('keyword')
+            ->distinct()
+            ->pluck('keyword')
+            ->merge(DB::table('ra_t_occ_agg')->whereNotNull('keyword')->where('keyword', '!=', '')->select('keyword')->distinct()->pluck('keyword'))
+            ->map(fn ($keyword) => strtoupper(trim((string) $keyword)))
+            ->filter()
+            ->unique();
 
         $services = DB::table('ra_t_services')
             ->where('actif', true)
             ->orderBy('nom_service')
-            ->get()
-            ->map(fn($s) => [
-                'keyword'         => $s->keyword,
-                'nom_service'     => $s->nom_service,
-                'nom_fournisseur' => $s->nom_fournisseur,
-                'nom_complet'     => $s->nom_service . ' (' . $s->keyword . ')',
-                'label'           => $s->nom_service . ' — ' . $s->nom_fournisseur,
-                'has_traffic'     => $activeKeywords->contains($s->keyword),
-            ])
-            ->values();
+            ->get();
 
-        return response()->json($services);
+        // Build a set of nom_service values that have at least one keyword with traffic
+        $servicesWithTraffic = $services
+            ->filter(fn($s) => $activeKeywords->contains(strtoupper(trim($s->keyword))))
+            ->pluck('nom_service')
+            ->map(fn($n) => strtoupper(trim($n)))
+            ->unique();
+
+        $result = $services->map(function($s) use ($activeKeywords, $servicesWithTraffic) {
+            $nomService = stripos($s->nom_service, 'inconnu') !== false ? 'Autre' : $s->nom_service;
+            $nomFournisseur = stripos($s->nom_fournisseur, 'inconnu') !== false ? 'Autre' : $s->nom_fournisseur;
+
+            return [
+                'keyword'         => $s->keyword,
+                'nom_service'     => $nomService,
+                'nom_fournisseur' => $nomFournisseur,
+                'nom_complet'     => $nomService . ' (' . $s->keyword . ')',
+                'label'           => $nomService . ' — ' . $nomFournisseur,
+                'has_traffic'     => $activeKeywords->contains(strtoupper(trim($s->keyword)))
+                                     || $servicesWithTraffic->contains(strtoupper(trim($s->nom_service))),
+            ];
+        })->values();
+
+        return response()->json($result);
     }
 }

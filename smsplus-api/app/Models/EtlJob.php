@@ -14,30 +14,23 @@ class EtlJob extends Model
 
     protected $fillable = [
         'job_name',
-        'category',
-        'source',
+        'job_type',
         'status',
         'started_at',
         'finished_at',
         'duration_ms',
-        'total_rows',
-        'processed_rows',
-        'error_rows',
+        'rows_processed',
+        'rows_inserted',
+        'rows_skipped',
         'error_message',
         'metadata',
-        'metrics',
-        'triggered_by',
         'page',
-        'user_email',
-        'ip_address',
-        'user_agent',
     ];
 
     protected $casts = [
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
         'metadata' => AsArrayObject::class,
-        'metrics' => AsArrayObject::class,
     ];
 
     public function scopeRunning($query)
@@ -57,7 +50,7 @@ class EtlJob extends Model
 
     public function scopeByCategory($query, string $category)
     {
-        return $query->where('category', $category);
+        return $query->where('job_type', $category);
     }
 
     public function scopeByJobName($query, string $jobName)
@@ -77,11 +70,12 @@ class EtlJob extends Model
 
     public function getProgressPercentageAttribute(): float
     {
-        if ($this->total_rows === 0) {
+        $total = $this->metadata['total_rows'] ?? 0;
+        if ($total === 0) {
             return 0;
         }
 
-        return min(100, ($this->processed_rows / $this->total_rows) * 100);
+        return min(100, ($this->rows_processed / $total) * 100);
     }
 
     public function isRunning(): bool

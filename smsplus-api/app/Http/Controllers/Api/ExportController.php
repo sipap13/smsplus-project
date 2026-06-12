@@ -242,7 +242,7 @@ class ExportController extends Controller
         }
 
         $rows = $q
-            ->selectRaw("o.start_date as date, COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu') as fournisseur, COALESCE(NULLIF(s.nom_service,''), COALESCE(NULLIF(o.keyword,''), 'Autre')) as service, COALESCE(NULLIF(o.keyword,''), 'Autre') as keyword_label, SUM(o.charge_amount) as revenus_dt, COUNT(*) as nb_cdr")
+            ->selectRaw("o.start_date as date, CASE WHEN LOWER(s.nom_fournisseur) LIKE '%inconnu%' THEN 'Autre' ELSE COALESCE(NULLIF(s.nom_fournisseur,''), 'Autre') END as fournisseur, CASE WHEN LOWER(s.nom_service) LIKE '%inconnu%' THEN 'Autre' ELSE COALESCE(NULLIF(s.nom_service,''), COALESCE(NULLIF(o.keyword,''), 'Autre')) END as service, COALESCE(NULLIF(o.keyword,''), 'Autre') as keyword_label, SUM(o.charge_amount) as revenus_dt, COUNT(*) as nb_cdr")
             ->groupBy('date')
             ->groupBy('fournisseur')
             ->groupBy('service')

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -20,8 +20,37 @@ export default function Revenus() {
   const [top20, setTop20] = useState([]);
   const [byFournisseur, setByFournisseur] = useState([]);
   const [exporting, setExporting] = useState(false);
+  const [selectedFournisseur, setSelectedFournisseur] = useState('');
 
   const { getNom, services: mappedServices } = useServiceMapping();
+
+  const fournisseurs = useMemo(() => {
+    return [...new Set(mappedServices.map(s => s.nom_fournisseur).filter(Boolean))].sort();
+  }, [mappedServices]);
+
+  const serviceByKeyword = useMemo(() => {
+    return mappedServices.reduce((acc, service) => {
+      if (service?.keyword) acc[service.keyword] = service;
+      return acc;
+    }, {});
+  }, [mappedServices]);
+
+  useEffect(() => {
+    // keep selection valid; if none selected, pick the first fournisseur
+    if (!fournisseurs.length) {
+      setSelectedFournisseur('');
+      return;
+    }
+
+    if (!selectedFournisseur) {
+      setSelectedFournisseur(fournisseurs[0]);
+      return;
+    }
+
+    if (selectedFournisseur && !fournisseurs.includes(selectedFournisseur)) {
+      setSelectedFournisseur(fournisseurs[0]);
+    }
+  }, [fournisseurs, selectedFournisseur]);
 
   useEffect(() => {
     setLoading(true);
@@ -63,7 +92,9 @@ export default function Revenus() {
   }, [days]);
 
   // Group by keyword for pie chart
-  const byKeyword = data.reduce((acc, row) => {
+  const filteredPieRows = data.filter(row => serviceByKeyword[row.keyword]?.nom_fournisseur === selectedFournisseur);
+
+  const byKeyword = filteredPieRows.reduce((acc, row) => {
     const key = row.keyword || 'Autre';
     const name = getNom(key);
     if (!acc[name]) acc[name] = 0;
@@ -99,9 +130,11 @@ export default function Revenus() {
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+      const row = payload[0]?.payload || {};
+      const tooltipLabel = row.date || row.period || label;
       return (
         <div style={{ background: '#0f172a', color: '#f1f5f9', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', border: '1px solid #1e293b' }}>
-          <div style={{ fontWeight: 700, marginBottom: '4px' }}>{displayDate(label)}</div>
+          <div style={{ fontWeight: 700, marginBottom: '4px' }}>{displayDate(tooltipLabel)}</div>
           {payload.map((p, i) => (
             <div key={i} style={{ color: p.color || '#6366f1', display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
               <span>{p.name}:</span>
@@ -268,9 +301,28 @@ export default function Revenus() {
 
         {/* Pie chart by service */}
         <div className="saas-surface" style={{ padding: '1.5rem' }}>
-          <h3 className="text-heading" style={{ margin: '0 0 1.5rem', fontSize: '1rem' }}>
-            Répartition par service
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <h3 className="text-heading" style={{ margin: 0, fontSize: '1rem' }}>
+              Répartition par service
+            </h3>
+            <select
+              value={selectedFournisseur}
+              onChange={e => setSelectedFournisseur(e.target.value)}
+              className="select-sm"
+              style={{
+                minWidth: '220px',
+                height: '34px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                padding: '0 10px',
+                fontSize: '13px',
+                background: 'var(--bg-surface)',
+                color: 'var(--text-main)'
+              }}
+            >
+              {fournisseurs.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
           <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0} debounce={50}>
             <PieChart>
               <Pie data={pieDataForChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>

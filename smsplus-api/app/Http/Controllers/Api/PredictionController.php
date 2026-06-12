@@ -19,8 +19,50 @@ class PredictionController extends Controller
         protected StatisticalPredictor $statisticalPredictor
     ) {}
 
+    private function getLatestPredictionDate(): string
+    {
+        $detailMax = DB::table('ra_t_occ_cdr_detail')->max('start_date');
+        $aggMax = DB::table('ra_t_occ_agg')->max('start_date');
+
+        if (! $detailMax) {
+            return $aggMax ?: now()->toDateString();
+        }
+
+        if (! $aggMax) {
+            return $detailMax;
+        }
+
+        return max($detailMax, $aggMax);
+    }
+
+    private function buildPredictionHistoryQuery(string $table, string $alias, string $fromDate, ?string $keyword = null, ?string $subscriberType = null)
+    {
+        $query = DB::table("{$table} as {$alias}")
+            ->where("{$alias}.call_type", '=', 'VAS')
+            ->where("{$alias}.start_date", '>=', $fromDate);
+
+        if ($table === 'ra_t_occ_cdr_detail') {
+            $query->where(function ($q) use ($alias) {
+                $q->whereNull("{$alias}.datasource")
+                  ->orWhereNotIn("{$alias}.datasource", ['OCC_AGG', 'DB_OCC_AGG']);
+            });
+        }
+
+        if ($keyword) {
+            $query->where("{$alias}.keyword", '=', $keyword);
+        }
+
+        if ($subscriberType) {
+            $query->where("{$alias}.subscriber_type", '=', $subscriberType);
+        }
+
+        return $query;
+    }
+
     public function revenus(Request $request)
     {
+        ini_set('memory_limit', '512M');
+        
         $validated = $request->validate([
             'keyword' => ['nullable', 'string', 'max:64'],
             'subscriber_type' => ['nullable', 'string', 'max:32'],
@@ -34,9 +76,10 @@ class PredictionController extends Controller
         $horizon = (int) ($validated['horizon'] ?? 7);
         $granularite = $validated['granularite'] ?? 'jour';
         $bypassCache = in_array(strtolower((string) $request->query('nocache', '0')), ['1', 'true', 'yes'], true);
+        $lookbackDays = 365;
 
         // Clé cache basée sur l'heure (Y-m-d-H)
-        $cacheKey = 'predictions_' . $horizon . '_' . ($keyword ?? 'all') . '_' . ($subscriberType ?? 'all') . '_' . date('Y-m-d-H');
+        $cacheKey = 'predictions_v2_' . $horizon . '_' . ($keyword ?? 'all') . '_' . ($subscriberType ?? 'all') . '_' . date('Y-m-d-H');
         // Cache plus long = moins d'appels Mistral/Groq (coûteux en temps)
         $cacheDuration = 21600; // 6 heures de base
 
@@ -48,43 +91,52 @@ class PredictionController extends Controller
         $startTime = microtime(true);
         $this->logJobProgress('prediction_data_collect', 'running');
 
-        $historiqueRaw = DB::table('ra_t_occ_cdr_detail')
-            ->selectRaw("
-                start_date::date as start_date,
-                keyword,
-                subscriber_type,
-                SUM(charge_amount) as total_revenus,
-                COUNT(*) as nb_cdr,
-                COUNT(DISTINCT a_msisdn) as nb_abonnes,
-                AVG(charge_amount) as revenu_moyen,
-                MAX(charge_amount) as revenu_max,
-                MIN(charge_amount) as revenu_min
-            ")
-            ->where('call_type', '=', 'VAS')
-            ->whereRaw("start_date >= NOW() - INTERVAL '120 days'")
-            ->when($keyword, function ($query) use ($keyword) {
-                $query->where('keyword', '=', $keyword);
-            })
-            ->when($subscriberType, function ($query) use ($subscriberType) {
-                $query->where('subscriber_type', '=', $subscriberType);
-            })
-            ->groupByRaw('start_date::date, keyword, subscriber_type')
-            ->orderByRaw('start_date::date asc')
+        $fromDate = date('Y-m-d', strtotime($this->getLatestPredictionDate() . " -{$lookbackDays} days"));
+
+        $historiqueRawDetail = $this->buildPredictionHistoryQuery('ra_t_occ_cdr_detail', 'o', $fromDate, $keyword, $subscriberType)
+            ->selectRaw(
+                'date(o.start_date) as start_date, o.keyword, o.subscriber_type, SUM(o.charge_amount) as total_revenus, COUNT(*) as nb_cdr, COUNT(DISTINCT o.a_msisdn) as nb_abonnes, AVG(o.charge_amount) as revenu_moyen, MAX(o.charge_amount) as revenu_max, MIN(o.charge_amount) as revenu_min'
+            )
+            ->groupByRaw('date(o.start_date), o.keyword, o.subscriber_type')
             ->get()
             ->map(function ($row) {
                 return [
-                    'start_date'     => (string) $row->start_date,
-                    'keyword'        => (string) ($row->keyword ?? 'AUTRE'),
-                    'subscriber_type'=> (string) ($row->subscriber_type ?? 'INCONNU'),
-                    'total_revenus'  => (float) ($row->total_revenus ?? 0),
-                    'nb_cdr'         => (int) ($row->nb_cdr ?? 0),
-                    'nb_abonnes'     => (int) ($row->nb_abonnes ?? 0),
-                    'revenu_moyen'   => (float) ($row->revenu_moyen ?? 0),
-                    'revenu_max'     => (float) ($row->revenu_max ?? 0),
-                    'revenu_min'     => (float) ($row->revenu_min ?? 0),
+                    'start_date'      => (string) $row->start_date,
+                    'keyword'         => (string) ($row->keyword ?? 'AUTRE'),
+                    'subscriber_type' => (string) ($row->subscriber_type ?? 'INCONNU'),
+                    'total_revenus'   => (float) ($row->total_revenus ?? 0),
+                    'nb_cdr'          => (int) ($row->nb_cdr ?? 0),
+                    'nb_abonnes'      => (int) ($row->nb_abonnes ?? 0),
+                    'revenu_moyen'    => (float) ($row->revenu_moyen ?? 0),
+                    'revenu_max'      => (float) ($row->revenu_max ?? 0),
+                    'revenu_min'      => (float) ($row->revenu_min ?? 0),
                 ];
             })
             ->toArray();
+
+        $historiqueRawAgg = $this->buildPredictionHistoryQuery('ra_t_occ_agg', 'oa', $fromDate, $keyword, $subscriberType)
+            ->selectRaw(
+                'date(oa.start_date) as start_date, oa.keyword, oa.subscriber_type, SUM(oa.charge_amount) as total_revenus, SUM(oa.cdr_count) as nb_cdr, 0 as nb_abonnes, CASE WHEN SUM(oa.cdr_count) > 0 THEN SUM(oa.charge_amount) / SUM(oa.cdr_count) ELSE 0 END as revenu_moyen, CASE WHEN SUM(oa.cdr_count) > 0 THEN SUM(oa.charge_amount) / SUM(oa.cdr_count) ELSE 0 END as revenu_max, CASE WHEN SUM(oa.cdr_count) > 0 THEN SUM(oa.charge_amount) / SUM(oa.cdr_count) ELSE 0 END as revenu_min'
+            )
+            ->groupByRaw('date(oa.start_date), oa.keyword, oa.subscriber_type')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'start_date'      => (string) $row->start_date,
+                    'keyword'         => (string) ($row->keyword ?? 'AUTRE'),
+                    'subscriber_type' => (string) ($row->subscriber_type ?? 'INCONNU'),
+                    'total_revenus'   => (float) ($row->total_revenus ?? 0),
+                    'nb_cdr'          => (int) ($row->nb_cdr ?? 0),
+                    'nb_abonnes'      => (int) ($row->nb_abonnes ?? 0),
+                    'revenu_moyen'    => (float) ($row->revenu_moyen ?? 0),
+                    'revenu_max'      => (float) ($row->revenu_max ?? 0),
+                    'revenu_min'      => (float) ($row->revenu_min ?? 0),
+                ];
+            })
+            ->toArray();
+
+        $historiqueRaw = array_merge($historiqueRawDetail, $historiqueRawAgg);
+        usort($historiqueRaw, fn ($a, $b) => strcmp($a['start_date'] . '|' . $a['keyword'] . '|' . $a['subscriber_type'], $b['start_date'] . '|' . $b['keyword'] . '|' . $b['subscriber_type']));
 
         $this->logJobProgress('prediction_data_collect', 'success', (int)((microtime(true) - $startTime) * 1000));
         $this->logJobProgress('prediction_metrics_calc', 'running');
@@ -660,7 +712,8 @@ class PredictionController extends Controller
             . "1. Utilise la baseline statistique fournie comme ancrage de prediction.\n"
             . "2. Ajuste finement ces valeurs de baseline en fonction des variations de week-end (variation weekend vs semaine de {$metriques['variation_weekend_vs_semaine_pct']}%), de la tendance lineaire, et de tes connaissances telecom (ex: rebond le lundi, baisse le weekend).\n"
             . "3. Reste realiste : ne devie pas de plus de 15% par rapport a la baseline statistique sans justification solide.\n"
-            . "4. Remplis les 'facteurs' (acteurs de tendance) de chaque prediction journaliere avec des labels explicites (ex: \"Effet Weekend\", \"Rattrapage Lundi\", \"Croissance lineaire\").\n\n"
+            . "4. Remplis les 'facteurs' (acteurs de tendance) de chaque prediction journaliere avec des labels explicites (ex: \"Effet Weekend\", \"Rattrapage Lundi\", \"Croissance lineaire\").\n"
+            . "5. CRUCIAL: Pour 'analyse_detaillee' et 'recommandations', NE RECOPIE PAS les valeurs d'exemple (comme 'texte court', 'f1', 'r1', 'texte'). Tu DOIS generer une analyse reelle et argumentee en fonction des donnees.\n\n"
             . "Reponds UNIQUEMENT en JSON strict, sans markdown, sans texte hors JSON:\n"
             . "{\n"
             . "  \"predictions_journalieres\": [\n"
@@ -670,8 +723,14 @@ class PredictionController extends Controller
             . "    {\"keyword\":\"mb1\",\"nom_service\":\"SERVICE\",\"revenus_predit_7j\":45.50,\"tendance\":\"hausse\",\"variation_pct\":5.2}\n"
             . "  ],\n"
             . "  \"resume_semaine\": {\"total_predit\":89.30,\"meilleur_jour\":{\"date\":\"2026-04-10\",\"montant\":15.20},\"pire_jour\":{\"date\":\"2026-04-13\",\"montant\":10.80},\"comparaison_semaine_precedente_pct\":3.5},\n"
-            . "  \"analyse_detaillee\": {\"tendance_generale\":\"texte\",\"facteurs_positifs\":[\"f1\"],\"facteurs_risque\":[\"r1\"],\"opportunites\":[\"o1\"],\"services_surveiller\":[\"kw1\"]},\n"
-            . "  \"recommandations\": [{\"priorite\":\"haute\",\"action\":\"texte\",\"impact_estime\":\"texte\",\"delai\":\"immediat\"}],\n"
+            . "  \"analyse_detaillee\": {\n"
+            . "    \"tendance_generale\":\"(Redige ici ton analyse globale sur la periode...)\",\n"
+            . "    \"facteurs_positifs\":[{\"titre\":\"Croissance observee\",\"description\":\"Explication...\"}],\n"
+            . "    \"facteurs_risque\":[{\"titre\":\"Baisse weekend\",\"description\":\"Explication...\"}],\n"
+            . "    \"opportunites\":[{\"titre\":\"Relance\",\"description\":\"Explication...\",\"action\":\"Investir...\"}],\n"
+            . "    \"services_surveiller\":[\"kw1\"]\n"
+            . "  },\n"
+            . "  \"recommandations\": [{\"priorite\":\"haute\",\"action\":\"Action precise a mener\",\"impact_estime\":\"Impact fort sur les revenus\",\"delai\":\"1 semaine\"}],\n"
             . "  \"score_fiabilite\": 78\n"
             . "}\n\n"
             . "Genere EXACTEMENT {$horizon} entrees dans predictions_journalieres, dates consecutives a partir de demain. Pas de commentaires, JSON pur uniquement.";
@@ -927,9 +986,15 @@ class PredictionController extends Controller
             ],
             'analyse_detaillee' => [
                 'tendance_generale' => 'Fallback prediction based on linear regression and historical volatility. Groq API unavailable.',
-                'facteurs_positifs' => ['Sufficient historical data'],
-                'facteurs_risque' => ['AI service unavailable'],
-                'opportunites' => ['Retry later for enriched AI analysis'],
+                'facteurs_positifs' => [
+                    ['titre' => 'Historique disponible', 'description' => 'Sufficient historical data for statistical fallback']
+                ],
+                'facteurs_risque' => [
+                    ['titre' => 'Service IA indisponible', 'description' => 'AI service unavailable, falling back to statistical model']
+                ],
+                'opportunites' => [
+                    ['titre' => 'Analyse enrichie', 'description' => 'Retry later for enriched AI analysis', 'action' => 'Actualiser plus tard']
+                ],
                 'services_surveiller' => array_slice(array_map(fn ($s) => $s['keyword'], $metriques['par_service'] ?? []), 0, 3),
             ],
             'recommandations' => [

@@ -1,2 +1,0 @@
-<?php
-echo json_encode(DB::table('ra_t_occ_cdr_detail as o')->leftJoin('ra_t_services as s', 's.keyword', '=', 'o.keyword')->selectRaw("COALESCE(NULLIF(s.nom_service,''), COALESCE(NULLIF(o.keyword,''), 'Autre')) as service, COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu') as fournisseur, SUM(o.charge_amount) as total, COUNT(*) as nb_cdr")->groupBy(DB::raw("COALESCE(NULLIF(s.nom_service,''), COALESCE(NULLIF(o.keyword,''), 'Autre'))"))->groupBy(DB::raw("COALESCE(NULLIF(s.nom_fournisseur,''), 'Inconnu')"))->orderByDesc('total')->limit(20)->get());

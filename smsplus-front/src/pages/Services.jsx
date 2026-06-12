@@ -159,13 +159,27 @@ export default function Services() {
     return acc;
   }, {});
 
+  const parseDecimalValue = (value) => {
+    if (value === null || value === undefined || value === '') return NaN;
+    const normalized = String(value).replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+
   const displayedServices = Object.values(servicesGroupes).map(s => {
-    const prixNums = s.prix_list.map(p => parseFloat(p)).filter(Number.isFinite);
+    const prixNums = s.prix_list.map(parseDecimalValue).filter((n) => Number.isFinite(n) && n > 0);
+    const prixFallback = Number(s.nb_cdr_30j || 0) > 0 && Number(s.revenus_30j || 0) > 0
+      ? Number(s.revenus_30j || 0) / Number(s.nb_cdr_30j || 1)
+      : NaN;
+    const prixAffiche = prixNums.length > 0
+      ? (prixNums.length > 1 ? `${Math.min(...prixNums).toFixed(3)} - ${Math.max(...prixNums).toFixed(3)}` : prixNums[0].toFixed(3))
+      : (Number.isFinite(prixFallback) ? prixFallback.toFixed(3) : '—');
+
     return {
       ...s,
       numero_court: s.numeros.join(', '),
       keyword: s.keywords.join(', '),
-      prixDisplay: prixNums.length > 1 ? `${Math.min(...prixNums).toFixed(3)} - ${Math.max(...prixNums).toFixed(3)}` : (prixNums.length === 1 ? prixNums[0].toFixed(3) : '—'),
+      prixDisplay: prixAffiche,
       isGroup: s.all_ids.length > 1
     };
   });
@@ -391,7 +405,7 @@ export default function Services() {
           <table className="table-mobile table-dense" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Service', 'Fournisseur & Num.', 'Tarification', 'Trafic (30j)', 'Santé & Alertes', 'Actions'].map((h) => (
+                {['Service', 'Fournisseur & Num.', 'Tarification', 'Trafic (Total)', 'Santé & Alertes', 'Actions'].map((h) => (
                   <th
                     key={h}
                     style={{

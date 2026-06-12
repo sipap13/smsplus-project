@@ -11,9 +11,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RaTUsersSeeder::class,
             RaTServicesSeeder::class,
-            RaTOccCdrSeeder::class,
-            RaTPfeCdrSeeder::class,
-            RaTReclamationsSeeder::class,
+            RaTEtlJobsSeeder::class,
         ]);
     }
 }

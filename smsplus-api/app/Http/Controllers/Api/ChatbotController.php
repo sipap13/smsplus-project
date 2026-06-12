@@ -57,7 +57,33 @@ class ChatbotController extends Controller
         // Requête de vérification directe sans passer par l'IA
         $verification = [];
 
-        if (str_contains(strtolower($question), 'plus actif')) {
+        if (preg_match('/plus\s+actif|plus\s+actifs|plus\s+active|plus\s+actives/i', $question) && preg_match('/jour|jours|journ[eé]e|diff[eé]rent/i', $question)) {
+            $top = \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')
+                ->where(function ($query) {
+                    $query->whereNull('datasource')
+                          ->orWhere('datasource', '!=', 'OCC_AGG');
+                })
+                ->select('a_msisdn',
+                    \Illuminate\Support\Facades\DB::raw('COUNT(DISTINCT start_date::date) as nb_jours_actifs'),
+                    \Illuminate\Support\Facades\DB::raw('COUNT(*) as nb_transactions')
+                )
+                ->groupBy('a_msisdn')
+                ->orderByDesc('nb_jours_actifs')
+                ->orderByDesc('nb_transactions')
+                ->limit(5)
+                ->get();
+
+            $verification = [
+                'top_5_msisdns' => $top,
+                'total_lignes_analysees' => \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')
+                    ->where(function ($query) {
+                        $query->whereNull('datasource')
+                              ->orWhere('datasource', '!=', 'OCC_AGG');
+                    })
+                    ->count(),
+                'reponse_chatbot_correcte' => $top->first()?->a_msisdn === $answer,
+            ];
+        } elseif (str_contains(strtolower($question), 'plus actif')) {
             $top = \Illuminate\Support\Facades\DB::table('ra_t_occ_cdr_detail')
                 ->where('call_type', 'VAS')
                 ->select('a_msisdn',

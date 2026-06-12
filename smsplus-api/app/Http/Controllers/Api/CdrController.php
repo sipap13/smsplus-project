@@ -41,12 +41,12 @@ class CdrController extends Controller
 
     private const MMG_SELECT = [
         'id',
-        'ne',
         'a_msisdn',
         'b_msisdn',
         'start_date',
         'start_hour',
         'event_type',
+        'call_type',
         'event_status',
         'subscriber_type',
         'service_type',
@@ -57,7 +57,11 @@ class CdrController extends Controller
      */
     protected function occFilteredQuery(Request $request)
     {
-        $q = DB::table('ra_t_occ_cdr_detail');
+        $q = DB::table('ra_t_occ_cdr_detail')
+            ->where(function ($query) {
+                $query->where('datasource', '!=', 'OCC_AGG')
+                      ->orWhereNull('datasource');
+            });
 
         $startDate = trim((string) $request->query('start_date', ''));
         if ($startDate !== '') {
@@ -88,26 +92,27 @@ class CdrController extends Controller
      */
     protected function mmgFilteredQuery(Request $request)
     {
-        $q = DB::table('ra_t_mmg_cdr_det');
+        $q = DB::table('ra_t_mmg_cdr_det as m')
+            ->selectRaw('m.id, m.b_msisdn, m.start_date, m.start_hour, m.event_type, m.call_type, m.event_status, m.subscriber_type, m.service_type, 1 as cdr_count');
 
         $startDate = trim((string) $request->query('start_date', ''));
         if ($startDate !== '') {
-            $q->where('start_date', $startDate);
+            $q->where('m.start_date', $startDate);
         }
 
         $subscriberType = trim((string) $request->query('subscriber_type', ''));
         if ($subscriberType !== '') {
-            $q->where('subscriber_type', $subscriberType);
+            $q->where('m.subscriber_type', $subscriberType);
         }
 
         $eventStatus = trim((string) $request->query('event_status', ''));
         if ($eventStatus !== '') {
             if (strcasecmp($eventStatus, 'Success') === 0) {
-                $q->whereRaw('LOWER(TRIM(COALESCE(event_status, \'\'))) = ?', ['success']);
+                $q->whereRaw('LOWER(TRIM(COALESCE(m.event_status, \'\'))) = ?', ['success']);
             } elseif (strcasecmp($eventStatus, 'Failed') === 0) {
                 $q->where(function ($w) {
-                    $w->whereRaw('LOWER(TRIM(COALESCE(event_status, \'\'))) = ?', ['failed'])
-                        ->orWhereRaw('LOWER(TRIM(COALESCE(event_status, \'\'))) LIKE ?', ['%fail%']);
+                    $w->whereRaw('LOWER(TRIM(COALESCE(m.event_status, \'\'))) = ?', ['failed'])
+                        ->orWhereRaw('LOWER(TRIM(COALESCE(m.event_status, \'\'))) LIKE ?', ['%fail%']);
                 });
             }
         }
@@ -135,8 +140,16 @@ class CdrController extends Controller
         $page = max(1, (int) $request->query('page', 1));
 
         $base = $this->occFilteredQuery($request);
-        $total = (clone $base)->count();
-        $totalCharge = (float) (clone $base)->sum('charge_amount');
+        $activeFilters = count(array_filter($request->only(['start_date','keyword','subscriber_type','partner'])));
+
+        if ($activeFilters === 0) {
+            $total = Cache::remember('occ_total_count_v2', 3600, fn() => (clone $base)->count());
+            $totalCharge = Cache::remember('occ_total_charge_v2', 3600, fn() => (float) (clone $base)->sum('charge_amount'));
+        } else {
+            $total = (clone $base)->count();
+            $totalCharge = (float) (clone $base)->sum('charge_amount');
+        }
+
         $lastPage = $total > 0 ? (int) ceil($total / $perPage) : 0;
         if ($lastPage > 0 && $page > $lastPage) {
             $page = $lastPage;
@@ -163,9 +176,26 @@ class CdrController extends Controller
             Log::warning('EtlMonitorService finishJob failed for cdr_occ_paginate', ['error' => $e->getMessage()]);
         }
 
+        if (filter_var((string) env('APP_DEBUG_OCC_LOG', ''), FILTER_VALIDATE_BOOLEAN)) {
+            Log::info('[cdr:occ] totals', [
+                'activeFilters' => $activeFilters,
+                'start_date' => $request->query('start_date'),
+                'keyword' => $request->query('keyword'),
+                'subscriber_type' => $request->query('subscriber_type'),
+                'partner' => $request->query('partner'),
+                'total' => $total,
+                'total_charge_amount' => $totalCharge,
+                'per_page' => $perPage,
+                'page' => $page,
+                'last_page' => $lastPage,
+                'sql' => $base->toSql(),
+            ]);
+        }
+
         $servicesMap = DB::table('ra_t_services')->pluck('nom_service', 'keyword')->toArray();
         $data->transform(function($row) use ($servicesMap) {
             $row->nom_service = $servicesMap[$row->keyword] ?? $row->keyword;
+            $row->b_msisdn = $this->formatOutgoingBMsisdn((string) $row->b_msisdn, 'occ');
             return $row;
         });
 
@@ -199,7 +229,14 @@ class CdrController extends Controller
         $page = max(1, (int) $request->query('page', 1));
 
         $base = $this->mmgFilteredQuery($request);
-        $total = (clone $base)->count();
+        $activeFilters = count(array_filter($request->only(['start_date','subscriber_type','event_status'])));
+
+        if ($activeFilters === 0) {
+            $total = Cache::remember('mmg_total_count_v2', 3600, fn() => (clone $base)->count());
+        } else {
+            $total = (clone $base)->count();
+        }
+
         $lastPage = $total > 0 ? (int) ceil($total / $perPage) : 0;
         if ($lastPage > 0 && $page > $lastPage) {
             $page = $lastPage;
@@ -225,6 +262,8 @@ class CdrController extends Controller
         $servicesMap = DB::table('ra_t_services')->pluck('nom_service', 'keyword')->toArray();
         $data->transform(function($row) use ($servicesMap) {
             $row->nom_service = $servicesMap[$row->service_type] ?? $row->service_type;
+            $row->b_msisdn = $this->formatOutgoingBMsisdn((string) $row->b_msisdn, 'mmg');
+            $row->cdr_count = 1;
             return $row;
         });
 
@@ -323,6 +362,9 @@ class CdrController extends Controller
 
         $occBase = DB::table('ra_t_occ_cdr_detail')->where(function ($w) use ($norm) {
             $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+        })->where(function ($query) {
+            $query->where('datasource', '!=', 'OCC_AGG')
+                  ->orWhereNull('datasource');
         });
         $occTotal = (clone $occBase)->count();
         $occ = (clone $occBase)
@@ -360,11 +402,13 @@ class CdrController extends Controller
         
         $occ->transform(function($row) use ($servicesMap) {
             $row->nom_service = $servicesMap[$row->keyword] ?? $row->keyword;
+            $row->b_msisdn = $this->formatOutgoingBMsisdn((string) $row->b_msisdn, 'occ');
             return $row;
         });
         
         $mmg->transform(function($row) use ($servicesMap) {
             $row->nom_service = $servicesMap[$row->service_type] ?? $row->service_type;
+            $row->b_msisdn = $this->formatOutgoingBMsisdn((string) $row->b_msisdn, 'mmg');
             return $row;
         });
 
@@ -378,7 +422,7 @@ class CdrController extends Controller
             'occ_truncated'    => $occTotal > $occ->count(),
             'mmg_truncated'    => $mmgTotal > $mmg->count(),
             'msisdn_normalized'=> $norm,
-            'risk_analysis'    => $this->riskService->analyze($norm),
+            'risk_analysis'    => $this->safeRiskAnalysis($norm),
         ]);
     }
 
@@ -416,6 +460,10 @@ class CdrController extends Controller
             ->where(function ($w) use ($norm) {
                 $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
             })
+            ->where(function ($query) {
+                $query->where('datasource', '!=', 'OCC_AGG')
+                      ->orWhereNull('datasource');
+            })
             ->selectRaw("MAX(start_date::date)::text as max_date")
             ->value('max_date');
 
@@ -435,9 +483,30 @@ class CdrController extends Controller
             ? \Carbon\Carbon::parse($request->query('date_fin'))->format('Y-m-d')
             : $latestRecord;
 
+        $earliestOcc = DB::table('ra_t_occ_cdr_detail')
+            ->where(function ($w) use ($norm) {
+                $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+            })
+            ->where(function ($query) {
+                $query->where('datasource', '!=', 'OCC_AGG')
+                      ->orWhereNull('datasource');
+            })
+            ->selectRaw("MIN(start_date::date)::text as min_date")
+            ->value('min_date');
+
+        $earliestMmg = DB::table('ra_t_mmg_cdr_det')
+            ->where(function ($w) use ($norm) {
+                $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+            })
+            ->selectRaw("MIN(start_date::date)::text as min_date")
+            ->value('min_date');
+
+        $minCandidates = array_filter([$earliestOcc, $earliestMmg]);
+        $earliestRecord = !empty($minCandidates) ? min($minCandidates) : \Carbon\Carbon::parse($dateFin)->subDays(60)->format('Y-m-d');
+
         $dateDebut = $request->query('date_debut')
             ? \Carbon\Carbon::parse($request->query('date_debut'))->format('Y-m-d')
-            : \Carbon\Carbon::parse($dateFin)->subDays(60)->format('Y-m-d');
+            : $earliestRecord;
 
         Log::info("[Timeline] Fenêtre: {$dateDebut} → {$dateFin}");
 
@@ -455,6 +524,10 @@ class CdrController extends Controller
             $occRows = DB::table('ra_t_occ_cdr_detail')
                 ->where(function ($w) use ($norm) {
                     $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+                })
+                ->where(function ($query) {
+                    $query->where('datasource', '!=', 'OCC_AGG')
+                          ->orWhereNull('datasource');
                 })
                 ->whereBetween('start_date', [$dateDebut, $dateFin])
                 ->orderByDesc('start_date')
@@ -487,7 +560,7 @@ class CdrController extends Controller
                     'service'         => $row->keyword,
                     'nom_service'     => $services[$row->keyword] ?? strtoupper($row->keyword ?? ''),
                     'montant'         => (float) $row->charge_amount,
-                    'destinataire'    => $row->b_msisdn,
+                    'destinataire'    => $this->formatOutgoingBMsisdn((string) $row->b_msisdn, 'occ'),
                     'statut'          => 'Success',
                     'type'            => $row->event_type ?? $row->call_type ?? 'VAS',
                     'subscriber_type' => $row->subscriber_type,
@@ -532,7 +605,7 @@ class CdrController extends Controller
                     'service'         => $row->service_type,
                     'nom_service'     => $services[$row->service_type] ?? strtoupper($row->service_type ?? ''),
                     'montant'         => 0.00,
-                    'destinataire'    => $row->b_msisdn,
+                    'destinataire'    => $this->formatOutgoingBMsisdn((string) $row->b_msisdn, 'mmg'),
                     'statut'          => $row->event_status ?? '—',
                     'type'            => $row->event_type ?? $row->call_type ?? 'SMS',
                     'subscriber_type' => $row->subscriber_type,
@@ -547,14 +620,17 @@ class CdrController extends Controller
 
         $items = $this->markDuplicates($items);
 
-        // ── par_jour : requête agrégée SANS limit pour un heat grid précis ──────
-        // On ne peut pas calculer par_jour depuis $items (limité à 200 lignes)
+        // par_jour uses an aggregated query to keep the timeline complete.
         $rawParJour = [];
 
         if ($source === 'occ' || $source === 'all') {
             $occAgg = DB::table('ra_t_occ_cdr_detail')
                 ->where(function ($w) use ($norm) {
                     $w->where('a_msisdn', $norm)->orWhere('b_msisdn', $norm);
+                })
+                ->where(function ($query) {
+                    $query->where('datasource', '!=', 'OCC_AGG')
+                          ->orWhereNull('datasource');
                 })
                 ->whereBetween('start_date', [$dateDebut, $dateFin])
                 ->selectRaw("start_date::date as jour, COUNT(*) as nb, SUM(charge_amount) as montant")
@@ -694,5 +770,72 @@ class CdrController extends Controller
         $s = ltrim($s, '+');
 
         return $s;
+    }
+
+    private function formatOutgoingBMsisdn(string $raw, string $type): string
+    {
+        $s = trim($raw);
+        $s = preg_replace('/\s+/', '', $s);
+        $s = ltrim($s, '+');
+
+        if ($s === '') {
+            return $s;
+        }
+
+        // Preserve internet marker
+        if (strcasecmp($s, 'internet.tn') === 0) {
+            return 'internet.tn';
+        }
+
+        // If contains letters, return as-is
+        if (preg_match('/[A-Za-z]/', $s)) {
+            return $s;
+        }
+
+        // Numeric: ensure 216-prefixed full or short-code with 216 prefix
+        if (ctype_digit($s)) {
+            if (str_starts_with($s, '216')) {
+                return $s;
+            }
+
+            // Short codes (<=6 digits) -> prefix with 216
+            if (strlen($s) <= 6) {
+                return '216' . ltrim($s, '0');
+            }
+
+            // Local 8-digit numbers (e.g., 20xxxxxx) -> prefix 216
+            if (strlen($s) === 8) {
+                return '216' . $s;
+            }
+
+            // Fallback: prefix 216
+            return '216' . ltrim($s, '0');
+        }
+
+        return $s;
+    }
+
+    private function safeRiskAnalysis(string $msisdn): array
+    {
+        try {
+            $result = $this->riskService->analyze($msisdn);
+            $result['_ok'] = true;
+            return $result;
+        } catch (
+            \Throwable $e
+        ) {
+            Log::warning('MsisdnRiskService failed for msisdn_search_all', [
+                'msisdn' => $msisdn,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'score' => null,
+                'level' => null,
+                'reasons' => [],
+                '_ok' => false,
+                '_error' => 'Le calcul du score de risque a échoué',
+            ];
+        }
     }
 }

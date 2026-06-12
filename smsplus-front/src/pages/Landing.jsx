@@ -226,10 +226,7 @@ export default function Landing({ bootError = '' }) {
         {/* Hero */}
         <section className="landing-hero">
           <div className="landing-hero-content">
-            <div className="landing-live-badge">
-              <span className="landing-live-dot" />
-              LIVE · Monitoring en temps réel
-            </div>
+
             <h1 className="landing-title" style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
               Supervision réseau et détection fraude avec <span style={{ color: 'var(--color-primary)' }}>SMS+ VAS</span>
             </h1>

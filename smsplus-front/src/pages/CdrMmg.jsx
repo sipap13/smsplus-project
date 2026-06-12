@@ -7,6 +7,19 @@ const PER_PAGE = 50;
 
 const EVENT_STATUS_OPTIONS = ['Success', 'Failed'];
 
+const EVENT_TYPE_LABELS = {
+  'MT':             'Terminant (MT)',
+  'MO':             'Originant (MO)',
+  'SMS':            'SMS',
+  'DATA':           'Données',
+  'CONTENT_DELIVERY': 'Livraison contenu',
+  'SHORT_MESSAGE':  'Message court',
+  'DATA_EVENT':     'Événement données',
+  '74':             'VAS (74)',
+  '51':             'SMS (51)',
+  '1':              'Voix (1)',
+};
+
 export default function CdrMmg() {
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
@@ -114,14 +127,15 @@ export default function CdrMmg() {
   };
 
   const cols = [
-    { key: 'a_msisdn', label: 'MSISDN Appelant' },
     { key: 'b_msisdn', label: 'MSISDN Destinataire' },
     { key: 'start_date', label: 'Date' },
     { key: 'start_hour', label: 'Heure' },
+    { key: 'call_type', label: 'Type Appel' },
     { key: 'event_type', label: 'Event type' },
     { key: 'event_status', label: 'Statut' },
     { key: 'subscriber_type', label: 'Abonné' },
     { key: 'service_type', label: 'Service' },
+    { key: 'cdr_count', label: 'Nb CDR' },
   ];
 
   return (
@@ -258,6 +272,15 @@ export default function CdrMmg() {
                             </span>
                             <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
                               {row.service_type}
+                            </span>
+                          </div>
+                        ) : c.key === 'event_type' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                              {EVENT_TYPE_LABELS[row.event_type] ?? row.event_type ?? '—'}
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                              {row.event_type}
                             </span>
                           </div>
                         ) : (row[c.key] ?? '—')}

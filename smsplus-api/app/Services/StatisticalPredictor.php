@@ -249,18 +249,18 @@ class StatisticalPredictor
     private function buildPositives(float $slope, array $weekdayPattern): array
     {
         $items = [];
-        if ($slope > 0) $items[] = 'Tendance haussière sur 60 jours';
+        if ($slope > 0) $items[] = ['titre' => 'Tendance haussière', 'description' => 'Tendance haussière sur les 60 derniers jours'];
         $bestDay = array_search(max($weekdayPattern), $weekdayPattern);
-        if ($bestDay) $items[] = $this->frenchDayName($bestDay) . ' est historiquement le meilleur jour';
-        $items[] = 'Modèle basé sur données réelles PostgreSQL';
+        if ($bestDay) $items[] = ['titre' => 'Jour fort détecté', 'description' => $this->frenchDayName($bestDay) . ' est historiquement le meilleur jour'];
+        $items[] = ['titre' => 'Données réelles', 'description' => 'Modèle basé sur données réelles PostgreSQL'];
         return $items;
     }
 
     private function buildRisks(float $stdDev, float $mean, int $horizon): array
     {
-        $risks = ['Prédiction basée sur calcul statistique (IA indisponible)'];
-        if ($stdDev > $mean * 0.3) $risks[] = 'Volatilité élevée réduit la précision';
-        if ($horizon > 7)          $risks[] = "Horizon > 7j : incertitude croissante";
+        $risks = [['titre' => 'Modèle de secours', 'description' => 'Prédiction basée sur calcul statistique (IA indisponible)']];
+        if ($stdDev > $mean * 0.3) $risks[] = ['titre' => 'Forte volatilité', 'description' => 'Volatilité élevée réduit la précision'];
+        if ($horizon > 7)          $risks[] = ['titre' => 'Horizon lointain', 'description' => "Horizon > 7j : incertitude croissante"];
         return $risks;
     }
 
@@ -309,7 +309,9 @@ class StatisticalPredictor
             'analyse_detaillee' => [
                 'tendance_generale'   => 'Données insuffisantes pour une analyse fiable. Minimum 7 jours recommandé.',
                 'facteurs_positifs'   => [],
-                'facteurs_risque'     => ['Moins de 3 jours de données disponibles'],
+                'facteurs_risque'     => [
+                    ['titre' => 'Données insuffisantes', 'description' => 'Moins de 3 jours de données disponibles']
+                ],
                 'opportunites'        => [],
                 'services_surveiller' => [],
             ],

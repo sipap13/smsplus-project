@@ -189,34 +189,49 @@ class DuplicateController extends Controller
         $mmgTotalDoublons = $mmgStats->count();
         $mmgAffectedCdr = $mmgStats->sum('total_count');
 
-        // Top MSISDN (OCC)
-        $topMsisdn = DB::table('ra_t_occ_cdr_detail')
-            ->select('a_msisdn', DB::raw('COUNT(*) as count'))
-            ->where('call_type', 'VAS')
-            ->where('start_date', '>=', $dateDebut)
-            ->groupBy('a_msisdn')
-            ->orderByDesc('count')
-            ->limit(5)
-            ->get();
+        // Top MSISDN (OCC) - Utilisateurs les plus touchés par les doublons
+        $topMsisdn = DB::table(function ($query) use ($dateDebut) {
+            $query->select('a_msisdn', DB::raw('COUNT(*) as cnt'))
+                ->from('ra_t_occ_cdr_detail')
+                ->where('call_type', 'VAS')
+                ->where('start_date', '>=', $dateDebut)
+                ->groupBy(['a_msisdn', 'b_msisdn', 'start_date', 'start_hour', 'charge_amount', 'keyword'])
+                ->havingRaw('COUNT(*) > 1');
+        }, 'dups')
+        ->select('a_msisdn', DB::raw('SUM(cnt) as count'))
+        ->groupBy('a_msisdn')
+        ->orderByDesc('count')
+        ->limit(5)
+        ->get();
 
-        // Top Services (OCC)
-        $topServices = DB::table('ra_t_occ_cdr_detail')
-            ->select('keyword', DB::raw('COUNT(*) as count'))
-            ->where('call_type', 'VAS')
-            ->where('start_date', '>=', $dateDebut)
-            ->groupBy('keyword')
-            ->orderByDesc('count')
-            ->limit(5)
-            ->get();
+        // Top Services (OCC) - Nombre de CDRs dupliqués par service
+        $topServices = DB::table(function ($query) use ($dateDebut) {
+            $query->select('keyword', DB::raw('COUNT(*) as cnt'))
+                ->from('ra_t_occ_cdr_detail')
+                ->where('call_type', 'VAS')
+                ->where('start_date', '>=', $dateDebut)
+                ->groupBy(['a_msisdn', 'b_msisdn', 'start_date', 'start_hour', 'charge_amount', 'keyword'])
+                ->havingRaw('COUNT(*) > 1');
+        }, 'dups')
+        ->select('keyword', DB::raw('SUM(cnt) as count'))
+        ->groupBy('keyword')
+        ->orderByDesc('count')
+        ->limit(5)
+        ->get();
 
-        // Répartition par date
-        $byDate = DB::table('ra_t_occ_cdr_detail')
-            ->select('start_date', DB::raw('COUNT(*) as count'))
-            ->where('call_type', 'VAS')
-            ->where('start_date', '>=', $dateDebut)
-            ->groupBy('start_date')
-            ->orderBy('start_date')
-            ->get();
+        // Répartition par date - Nombre de CDRs dupliqués par jour
+        $byDate = DB::table(function ($query) use ($dateDebut) {
+            $query->select('start_date', DB::raw('COUNT(*) as cnt'))
+                ->from('ra_t_occ_cdr_detail')
+                ->where('call_type', 'VAS')
+                ->where('start_date', '>=', $dateDebut)
+                ->groupBy(['a_msisdn', 'b_msisdn', 'start_date', 'start_hour', 'charge_amount', 'keyword'])
+                ->havingRaw('COUNT(*) > 1');
+        }, 'dups')
+        ->select('start_date', DB::raw('SUM(cnt) as count'))
+        ->groupBy('start_date')
+        ->orderBy('start_date')
+        ->get();
 
         return response()->json([
             'occ' => [

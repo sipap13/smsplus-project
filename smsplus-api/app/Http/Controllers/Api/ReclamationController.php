@@ -14,6 +14,9 @@ class ReclamationController extends Controller
     ) {}
     public function byMsisdn($msisdn)
     {
+        // Normaliser le MSISDN (cohérent avec CdrController)
+        $msisdn = ltrim(preg_replace('/\s+/', '', $msisdn), '+');
+
         // Job recherche OCC
         $jobIdOcc = null;
         try {

@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '../api/axios';
 
-/* ───────── Translation Maps ───────── */
+// Translation maps
 
 const JOB_LABELS = {
   'etl_agg_from_raw': 'Agrégation CDR',
@@ -96,7 +96,7 @@ const JOB_ICONS = {
   'report_pdf': '📋',
 };
 
-/* ───────── Helpers ───────── */
+// Helpers
 
 const STATUS_ICONS = {
   success: '✓',
@@ -199,7 +199,7 @@ function relativeTime(dateStr) {
   }
 }
 
-/* ───────── Sub-components ───────── */
+// Sub-components
 
 function CompactBar({ jobs, title }) {
   if (!jobs || jobs.length === 0) return null;
@@ -868,7 +868,7 @@ function InlineTimeline({ jobs, steps }) {
   );
 }
 
-/* ───────── CSS Animation (inject once) ───────── */
+// CSS animation injection
 const styleTag = document.createElement('style');
 styleTag.textContent = `
   @keyframes job-pulse {
@@ -881,7 +881,7 @@ if (!document.head.querySelector('[data-job-status-bar]')) {
   document.head.appendChild(styleTag);
 }
 
-/* ───────── Main Component ───────── */
+// Main component
 
 export default function JobStatusBar({
   jobTypes = [],

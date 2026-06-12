@@ -76,7 +76,7 @@ class ImportServicesFromExcel extends Command
 
             $nomFournisseur = $this->cleanStr($get('nom_fournisseur'));
             $nomService = $this->cleanStr($get('nom_service'));
-            $keyword = trim((string) $get('keyword'));
+            $keyword = strtoupper(trim((string) $get('keyword')));
             $numeroCourt = trim((string) $get('numero_court'));
             $type = $this->cleanStr($get('type_service'));
             $prix = $this->parseDecimal($get('prix'));
@@ -86,10 +86,10 @@ class ImportServicesFromExcel extends Command
             }
 
             if ($nomFournisseur === null) {
-                $nomFournisseur = 'Inconnu';
+                $nomFournisseur = 'Autre';
             }
             if ($nomService === null) {
-                $nomService = 'Inconnu';
+                $nomService = 'Autre';
             }
             if ($numeroCourt === '') {
                 $numeroCourt = '0';

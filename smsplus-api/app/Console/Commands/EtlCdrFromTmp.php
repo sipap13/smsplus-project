@@ -114,7 +114,7 @@ class EtlCdrFromTmp extends Command
                 NULLIF(TRIM(call_type), '') as call_type,
                 NULLIF(TRIM(event_status), '') as event_status,
                 NULLIF(TRIM(subscriber_type), '') as subscriber_type,
-                NULLIF(TRIM(service_type), '') as service_type,
+                    NULLIF(UPPER(TRIM(service_type)), '') as service_type,
                 NULLIF(TRIM(orig_start_time), '') as orig_start_time,
                 NOW(), NOW()
             FROM ra_t_tmp_mmg
@@ -160,7 +160,7 @@ class EtlCdrFromTmp extends Command
                 NULL,
                 NULLIF(TRIM(partner), '') as partner,
                 COALESCE(NULLIF(regexp_replace(REPLACE(charge_amount_orig, ',', '.'), '\s', '', 'g'), ''), '0')::numeric(14,3) as charge_amount,
-                NULLIF(TRIM(b_msisdn), '') as keyword,
+                    NULLIF(UPPER(TRIM(service_type)), '') as keyword,
                 NULLIF(TRIM(orig_start_time), '') as orig_start_time,
                 NOW(), NOW()
             FROM ra_t_tmp_occ
@@ -228,7 +228,7 @@ class EtlCdrFromTmp extends Command
             'roaming_type' => null,
             'partner' => $this->nullify($r->partner ?? null),
             'charge_amount' => $this->toDecimal($r->charge_amount_orig ?? null),
-            'keyword' => null,
+            'keyword' => $this->nullify($r->service_type ?? null),
             'orig_start_time' => $this->nullify($r->orig_start_time ?? null),
             'created_at' => now(),
             'updated_at' => now(),

@@ -25,7 +25,7 @@ export function useServiceMapping() {
         });
         cachedMapping = map;
         setMapping(map);
-        setServices(res.data);
+        setServices(Object.values(map));
       })
       .catch(() => {})
       .finally(() => setLoading(false));

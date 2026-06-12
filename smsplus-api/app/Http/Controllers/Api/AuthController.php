@@ -29,17 +29,13 @@ class AuthController extends Controller
         protected \App\Services\AuditLogService $auditLog,
     ) {}
 
-    /* ───────────────────────────────
-       Helper : générer un code aléatoire
-       ─────────────────────────────── */
+    // Helper: generate a random verification code.
     private function generateCode(): string
     {
         return str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
     }
 
-    /* ───────────────────────────────
-       Helper : masquer l'email
-       ─────────────────────────────── */
+    // Helper: mask an email address for logs and responses.
     private function maskEmail(string $email): string
     {
         $parts = explode('@', $email);
@@ -53,9 +49,7 @@ class AuthController extends Controller
         return substr($name, 0, $visible).str_repeat('*', max(1, strlen($name) - $visible)).'@'.$domain;
     }
 
-    /* ───────────────────────────────
-       Helper : logger une tentative
-       ─────────────────────────────── */
+    // Helper: log a login attempt.
     private function logAttempt(?object $user, string $status, Request $request, string $details = ''): void
     {
         DB::table('ra_t_login_logs')->insert([
@@ -69,9 +63,7 @@ class AuthController extends Controller
         ]);
     }
 
-    /* ───────────────────────────────
-       Helper : clé de blocage/cache
-       ─────────────────────────────── */
+    // Helper: build blocking and rate-limit cache keys.
     private function blockKey(string $email): string
     {
         return '2fa_block_'.md5($email);
@@ -92,11 +84,9 @@ class AuthController extends Controller
         return 'login_rate_'.md5($request->ip());
     }
 
-    /* SMS 2FA désactivé par l'utilisateur */
+    // SMS 2FA is disabled by the user.
 
-    /* ───────────────────────────────
-       ÉTAPE 1 — login()
-       ─────────────────────────────── */
+    // login() authenticates the user and starts the monitoring job.
     public function login(Request $request)
     {
         $jobId = null;
@@ -171,9 +161,7 @@ class AuthController extends Controller
         return $result;
     }
 
-    /* ───────────────────────────────
-       ÉTAPE 2 — verifyTwoFa()
-       ─────────────────────────────── */
+    // verifyTwoFa() handles 2FA verification.
     public function verifyTwoFa(Request $request)
     {
         $jobId = null;
@@ -316,9 +304,7 @@ class AuthController extends Controller
         return $result;
     }
 
-    /* ───────────────────────────────
-       RENVOI — resendCode()
-       ─────────────────────────────── */
+    // resendCode() resends the 2FA code.
     public function resendCode(Request $request)
     {
         $request->validate([
@@ -384,9 +370,7 @@ class AuthController extends Controller
         return response()->json($response);
     }
 
-    /* ───────────────────────────────
-       Helper : émettre token et répondre
-       ─────────────────────────────── */
+    // Helper: issue a token and return the authenticated response.
     private function issueTokenAndRespond(object $user, Request $request)
     {
         $plainToken = bin2hex(random_bytes(32));
@@ -422,9 +406,7 @@ class AuthController extends Controller
         ]);
     }
 
-    /* ───────────────────────────────
-       Helper : masquer le téléphone
-       ─────────────────────────────── */
+    // Helper: mask a phone number for display.
     private function maskPhone(string $phone): string
     {
         $digits = preg_replace('/\D/', '', $phone);
@@ -435,9 +417,7 @@ class AuthController extends Controller
         return substr($digits, 0, 2).str_repeat('*', strlen($digits) - 4).substr($digits, -2);
     }
 
-    /* ───────────────────────────────
-       logout()
-       ─────────────────────────────── */
+    // logout() invalidates the current bearer token.
     public function logout(Request $request)
     {
         $auth = (string) $request->header('Authorization', '');
@@ -458,9 +438,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'Déconnecté avec succès']);
     }
 
-    /* ───────────────────────────────
-       me()
-       ─────────────────────────────── */
+    // me() returns the authenticated user profile.
     public function me(Request $request)
     {
         $user = $request->attributes->get('auth_user');

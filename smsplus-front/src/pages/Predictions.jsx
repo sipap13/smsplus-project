@@ -133,13 +133,15 @@ function CustomTooltip({ active, payload, label }) {
   const min = payload.find(x => x.dataKey === 'confMin');
   const max = payload.find(x => x.dataKey === 'confMax');
   const isPred = !!p;
-  const dateObj = new Date(label);
-  const jourIdx = dateObj.getDay();
-  const jourNom = JOURS[jourIdx];
+  const row = payload[0]?.payload || {};
+  const rawLabel = row.label || label;
+  const dateObj = rawLabel ? new Date(rawLabel) : null;
+  const jourIdx = dateObj && !Number.isNaN(dateObj.getTime()) ? dateObj.getDay() : null;
+  const jourNom = jourIdx !== null ? JOURS[jourIdx] : null;
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.7rem 0.9rem', fontSize: '0.82rem', color: 'var(--text-main)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxWidth: 260 }}>
       <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-heading)' }}>
-        {isPred ? '🔮' : '📅'} {label} {isPred && `· ${jourNom}`}
+        {isPred ? '🔮' : '📅'} {rawLabel} {isPred && jourNom ? `· ${jourNom}` : ''}
       </div>
       {h && h.value != null && (<div>Revenus reels : <strong>{formatDT(h.value)}</strong></div>)}
       {p && p.value != null && (
@@ -226,12 +228,16 @@ export default function Predictions() {
     load(true);
   };
 
+  const [showFullHistory, setShowFullHistory] = useState(false);
+
   const chartData = useMemo(() => {
     if (!data) return [];
-    const hist = (data.historique || []).map(h => ({ label: h.start_date, historique: h.total_revenus, prediction: null, confMin: null, confMax: null }));
+    const allHist = (data.historique || []).map(h => ({ label: h.start_date, historique: h.total_revenus, prediction: null, confMin: null, confMax: null }));
+    // By default show only last 60 days of history for a readable chart
+    const hist = showFullHistory ? allHist : allHist.slice(-60);
     const preds = (data.predictions || []).map(p => ({ label: p.date, historique: null, prediction: p.revenus_predit, confMin: p.revenus_min, confMax: p.revenus_max }));
     return [...hist, ...preds];
-  }, [data]);
+  }, [data, showFullHistory]);
 
   const moyenneHistorique = useMemo(() => {
     if (!data?.historique?.length) return 0;
@@ -467,12 +473,48 @@ export default function Predictions() {
       {/* CHART */}
       <FadeSection>
         <div className="glass-card panel surface-pad" style={{ marginBottom: '1.2rem' }}>
-          <h3 className="text-heading" style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Historique &amp; Predictions</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h3 className="text-heading" style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Historique &amp; Predictions</h3>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                {showFullHistory ? `${(data?.historique || []).length} jours` : '60 derniers jours'}
+              </span>
+              <button
+                onClick={() => setShowFullHistory(v => !v)}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '0.25rem 0.7rem',
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: showFullHistory ? 'var(--primary)' : 'var(--bg-elevated)',
+                  color: showFullHistory ? '#fff' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontWeight: 600,
+                }}
+              >
+                {showFullHistory ? '← Zoom 60j' : 'Voir tout →'}
+              </button>
+            </div>
+          </div>
           <div style={{ width: '100%', height: 320, minHeight: 320 }}>
             <ResponsiveContainer width="100%" height={320} minWidth={0} debounce={50}>
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval="preserveStartEnd" angle={-30} textAnchor="end" height={50} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+                  interval={Math.max(0, Math.floor(chartData.length / 12) - 1)}
+                  angle={-30}
+                  textAnchor="end"
+                  height={50}
+                  tickFormatter={(val) => {
+                    if (!val) return '';
+                    const parts = val.split('-');
+                    if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+                    return val;
+                  }}
+                />
                 <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickFormatter={formatCompactNumber} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-muted)' }} formatter={(value) => (value === 'historique' ? 'Historique reel' : value === 'prediction' ? 'Prediction centrale' : value === 'confMin' ? 'Intervalle confiance' : value)} />
@@ -598,29 +640,52 @@ export default function Predictions() {
             </Accordion>
             <Accordion title="Facteurs positifs" icon="✅">
               {analyse.facteurs_positifs?.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
-                  {analyse.facteurs_positifs.map((f, i) => (
-                    <li key={i} style={{ color: '#16a34a', marginBottom: 4 }}>{typeof f === 'string' ? f : f.facteur}</li>
-                  ))}
-                </ul>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+                  {analyse.facteurs_positifs.map((f, i) => {
+                    const titre = typeof f === 'string' ? f : (f.titre || f.facteur);
+                    const desc = typeof f === 'string' ? null : f.description;
+                    return (
+                      <div key={i} style={{ padding: '0.75rem', background: 'rgba(22,163,74,0.06)', borderRadius: '8px', borderLeft: '3px solid #16a34a' }}>
+                        <div style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.88rem', marginBottom: desc ? 4 : 0 }}>{titre}</div>
+                        {desc && <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.4 }}>{desc}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : <p style={{ margin: 0, color: 'var(--text-muted)' }}>Aucun facteur positif identifie.</p>}
             </Accordion>
             <Accordion title="Facteurs de risque" icon="⚠️">
               {analyse.facteurs_risque?.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
-                  {analyse.facteurs_risque.map((f, i) => (
-                    <li key={i} style={{ color: '#dc2626', marginBottom: 4 }}>{typeof f === 'string' ? f : f.risque}</li>
-                  ))}
-                </ul>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+                  {analyse.facteurs_risque.map((f, i) => {
+                    const titre = typeof f === 'string' ? f : (f.titre || f.risque);
+                    const desc = typeof f === 'string' ? null : f.description;
+                    return (
+                      <div key={i} style={{ padding: '0.75rem', background: 'rgba(220,38,38,0.06)', borderRadius: '8px', borderLeft: '3px solid #dc2626' }}>
+                        <div style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.88rem', marginBottom: desc ? 4 : 0 }}>{titre}</div>
+                        {desc && <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.4 }}>{desc}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : <p style={{ margin: 0, color: 'var(--text-muted)' }}>Aucun risque majeur identifie.</p>}
             </Accordion>
             <Accordion title="Opportunites" icon="💡">
               {analyse.opportunites?.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
-                  {analyse.opportunites.map((f, i) => (
-                    <li key={i} style={{ color: '#3b82f6', marginBottom: 4 }}>{typeof f === 'string' ? f : f.opportunite}</li>
-                  ))}
-                </ul>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+                  {analyse.opportunites.map((f, i) => {
+                    const titre = typeof f === 'string' ? f : (f.titre || f.opportunite);
+                    const desc = typeof f === 'string' ? null : f.description;
+                    const action = typeof f === 'string' ? null : f.action;
+                    return (
+                      <div key={i} style={{ padding: '0.75rem', background: 'rgba(59,130,246,0.06)', borderRadius: '8px', borderLeft: '3px solid #3b82f6' }}>
+                        <div style={{ color: '#3b82f6', fontWeight: 600, fontSize: '0.88rem', marginBottom: desc || action ? 4 : 0 }}>{titre}</div>
+                        {desc && <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.4, marginBottom: action ? 6 : 0 }}>{desc}</div>}
+                        {action && <div style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 600 }}>→ Action : {action}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : <p style={{ margin: 0, color: 'var(--text-muted)' }}>Aucune opportunite identifiee.</p>}
             </Accordion>
           </div>

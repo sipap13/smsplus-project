@@ -13,11 +13,11 @@ class FraudController extends Controller
         $source = strtolower((string) $request->query('source', 'occ'));
         $metric = strtolower((string) $request->query('metric', 'traffic')); // traffic|revenue (occ_agg only)
         $threshold = (float) $request->query('threshold', 0.20); // 20%
-        $minCount = (int) $request->query('min_count', 50);
+        $minCount = (int) $request->query('min_count', 5);
 
-        if (! in_array($source, ['occ', 'mmg', 'occ_agg', 'mmg_agg'], true)) {
+        if (! in_array($source, ['occ', 'mmg', 'mmg_agg'], true)) {
             return response()->json([
-                'message' => 'Paramètre source invalide. Valeurs: occ | mmg | occ_agg | mmg_agg',
+                'message' => 'Paramètre source invalide. Valeurs: occ | mmg | mmg_agg',
             ], 422);
         }
 
@@ -32,14 +32,13 @@ class FraudController extends Controller
 
         if (! $isOcc && $metric === 'revenue') {
             return response()->json([
-                'message' => 'metric=revenue est supporté uniquement pour OCC (occ_agg).',
+                'message' => 'metric=revenue est supporté uniquement pour OCC.',
             ], 422);
         }
 
         $table = match ($source) {
             'occ' => 'ra_t_occ_cdr_detail',
             'mmg' => 'ra_t_mmg_cdr_det',
-            'occ_agg' => 'ra_t_occ_agg',
             'mmg_agg' => 'ra_t_mmg_agg',
             default => 'ra_t_occ_cdr_detail',
         };
@@ -48,7 +47,8 @@ class FraudController extends Controller
         $typeCol = 'call_type';
         $statusCol = $isOcc ? null : 'event_status';
 
-        // Anchor date: max date for SMS+ traffic (VAS) with non-empty service key.
+        // Anchor date: most recent date with significant VAS traffic volume (>100 CDRs).
+        // This avoids picking a date with only a few manually-injected records.
         $anchorQ = DB::table($table)
             ->where($typeCol, '=', 'VAS')
             ->whereRaw("COALESCE(NULLIF(TRIM($serviceCol), ''), '') <> ''");
@@ -56,7 +56,12 @@ class FraudController extends Controller
             $anchorQ->where($statusCol, '=', 'Success');
         }
 
-        $anchorDate = $anchorQ->max('start_date');
+        $anchorDate = (clone $anchorQ)
+            ->selectRaw('start_date::date as d, COUNT(*) as cnt')
+            ->groupByRaw('start_date::date')
+            ->havingRaw('COUNT(*) > 100')
+            ->orderByDesc('d')
+            ->value('d');
         if (! $anchorDate) {
             return response()->json([
                 'meta' => [
@@ -72,8 +77,8 @@ class FraudController extends Controller
 
         // Rolling comparison: anchor day vs average of previous 7 days (excluding anchor day).
         $valueExpr = $isAgg
-            ? ($isOcc && $metric === 'revenue' ? 'SUM(charge_amount)' : 'SUM(cdr_count)')
-            : 'COUNT(*)';
+            ? 'SUM(cdr_count)'
+            : ($isOcc && $metric === 'revenue' ? 'SUM(charge_amount)' : 'COUNT(*)');
 
         $extraWhere = '';
         if (! $isOcc) {

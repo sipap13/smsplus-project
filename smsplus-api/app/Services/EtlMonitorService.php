@@ -55,23 +55,24 @@ class EtlMonitorService
             ($normalized['processed_rows'] ?? null) === null &&
             ($normalized['total_rows'] ?? null) === null
         ) {
-            if (in_array($job->category, ['systeme', 'command', 'rapport'], true)) {
+            if (isset($job->job_type) && in_array($job->job_type, ['systeme', 'command', 'rapport'], true)) {
                 $normalized['processed_rows'] = 1;
             }
+
         }
 
         return $normalized;
     }
 
 
-    public function startJob(string $jobName, string $category = 'command', ?string $source = null, int $totalLignes = 0, array $metadata = []): EtlJob
+    public function startJob(string $jobName, string $jobType = 'command', ?string $source = null, int $totalLignes = 0, array $metadata = []): EtlJob
     {
         $page = $metadata['page'] ?? null;
         $triggeredBy = $metadata['triggered_by'] ?? $this->getTriggeredBy();
-        
+
         $job = EtlJob::create([
             'job_name' => $jobName,
-            'category' => $category,
+            'job_type' => $jobType,
             'status' => 'running',
             'started_at' => now(),
             'metadata' => $metadata,
@@ -80,6 +81,7 @@ class EtlMonitorService
 
         return $job;
     }
+
 
     public function finishJob(EtlJob $job, string $status = 'success', ?string $errorMessage = null, array $metadata = []): EtlJob
     {
@@ -97,14 +99,11 @@ class EtlMonitorService
             $updateData['metadata'] = array_merge((array) ($job->metadata ?? []), $metadata);
             
             $normalized = $this->normalizeRowCounts($metadata, $status === 'success' ? $job : null);
-            if (isset($normalized['total_rows'])) {
-                $updateData['total_rows'] = $normalized['total_rows'];
-            }
             if (isset($normalized['processed_rows'])) {
-                $updateData['processed_rows'] = $normalized['processed_rows'];
+                $updateData['rows_processed'] = $normalized['processed_rows'];
             }
             if (isset($normalized['error_rows'])) {
-                $updateData['error_rows'] = $normalized['error_rows'];
+                $updateData['rows_skipped'] = $normalized['error_rows'];
             }
 
         }
@@ -134,14 +133,11 @@ class EtlMonitorService
             $updateData['metadata'] = array_merge((array) ($job->metadata ?? []), $metadata);
             
             $normalized = $this->normalizeRowCounts($metadata);
-            if (isset($normalized['total_rows'])) {
-                $updateData['total_rows'] = $normalized['total_rows'];
-            }
             if (isset($normalized['processed_rows'])) {
-                $updateData['processed_rows'] = $normalized['processed_rows'];
+                $updateData['rows_processed'] = $normalized['processed_rows'];
             }
             if (isset($normalized['error_rows'])) {
-                $updateData['error_rows'] = $normalized['error_rows'];
+                $updateData['rows_skipped'] = $normalized['error_rows'];
             }
 
         }
